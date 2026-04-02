@@ -1,23 +1,38 @@
-# Environments
+# Environment files
 .env
 .env.local
 .env.*.local
 
-# Python / Django
+# Python virtual environments
 .venv/
 venv/
+env/
+
+# Python bytecode and caches
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Django local artifacts
 *.sqlite3
 db.sqlite3
 media/
 staticfiles/
-.pytest_cache/
 
-# IDE & OS
+# Coverage and test outputs
+.coverage
+.coverage.*
+htmlcov/
+
+# IDE and OS files
 .vscode/
 .idea/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Local temporary tooling
+.tmp_mcp/
