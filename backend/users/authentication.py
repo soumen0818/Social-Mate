@@ -4,6 +4,19 @@ from rest_framework import authentication
 from rest_framework import exceptions
 from users.models import User
 
+
+_jwk_client = None
+
+
+def _get_jwk_client():
+    global _jwk_client
+    if _jwk_client is None:
+        if not settings.SUPABASE_URL:
+            raise exceptions.AuthenticationFailed('Supabase URL is not configured.')
+        jwks_url = f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1/.well-known/jwks.json"
+        _jwk_client = jwt.PyJWKClient(jwks_url)
+    return _jwk_client
+
 class SupabaseJWTAuthentication(authentication.BaseAuthentication):
     def authenticate(self, request):
         auth_header = request.META.get('HTTP_AUTHORIZATION')
@@ -18,20 +31,31 @@ class SupabaseJWTAuthentication(authentication.BaseAuthentication):
 
         token = parts[1]
 
-        if not settings.SUPABASE_JWT_SECRET:
-            raise exceptions.AuthenticationFailed('Supabase JWT secret is not configured.')
-        
         try:
-            # Supabase signs JWTs using the project's JWT Secret
-            payload = jwt.decode(
-                token, 
-                settings.SUPABASE_JWT_SECRET, 
-                algorithms=["HS256"],
-                options={"verify_aud": False}
-            )
+            unverified_header = jwt.get_unverified_header(token)
+            algorithm = unverified_header.get('alg', 'HS256')
+
+            if algorithm == 'HS256':
+                if not settings.SUPABASE_JWT_SECRET:
+                    raise exceptions.AuthenticationFailed('Supabase JWT secret is not configured.')
+
+                payload = jwt.decode(
+                    token,
+                    settings.SUPABASE_JWT_SECRET,
+                    algorithms=['HS256'],
+                    options={'verify_aud': False}
+                )
+            else:
+                signing_key = _get_jwk_client().get_signing_key_from_jwt(token).key
+                payload = jwt.decode(
+                    token,
+                    signing_key,
+                    algorithms=[algorithm],
+                    options={'verify_aud': False}
+                )
         except jwt.ExpiredSignatureError:
             raise exceptions.AuthenticationFailed('Token has expired.')
-        except jwt.DecodeError:
+        except jwt.InvalidTokenError:
             raise exceptions.AuthenticationFailed('Error decoding token.')
 
         # Supabase JWTs contain the user's UUID in the 'sub' claim

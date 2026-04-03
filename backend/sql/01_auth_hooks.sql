@@ -20,6 +20,7 @@ begin
     id, 
     username, 
     email, 
+    password,
     display_name, 
     bio,
     avatar_url,
@@ -33,6 +34,7 @@ begin
     new.id, 
     generated_username,
     new.email,
+    '!', -- unusable Django password; Supabase manages auth
     -- Pull the name out of user_metadata if the frontend passed it during signUp()
     coalesce(new.raw_user_meta_data->>'name', ''),
     '',   -- empty bio

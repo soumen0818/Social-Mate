@@ -8,8 +8,8 @@ insert into storage.buckets (id, name, public)
 values ('posts_media', 'posts_media', true)
 on conflict (id) do nothing;
 
--- 2. Ensure storage object RLS is enabled
-alter table storage.objects enable row level security;
+-- 2. storage.objects RLS is managed by Supabase.
+-- Avoid ALTER TABLE here because non-owner roles can hit "must be owner of table objects".
 
 -- 3. Make policies re-runnable
 drop policy if exists "Allow authenticated uploads" on storage.objects;
