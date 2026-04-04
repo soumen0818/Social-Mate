@@ -1,16 +1,25 @@
+import os
+import uuid
+from datetime import timedelta
+
+from django.conf import settings
+from django.utils import timezone
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from notifications.models import Notification
-from posts.models import Comment, Like, Post, Share
+from posts.models import Comment, Community, CommunityMembership, Like, Post, PostUploadIntent, Share
 from posts.serializers import (
 	CommentSerializer,
 	CommentCreateSerializer,
+	CommunitySerializer,
 	PostCreateSerializer,
+	PostUploadIntentCreateSerializer,
 	PostSerializer,
 	ShareCreateSerializer,
+	POST_UPLOAD_INTENT_TTL_MINUTES,
 )
 
 
@@ -18,7 +27,7 @@ class PostListCreateView(generics.ListCreateAPIView):
 	permission_classes = [IsAuthenticated]
 
 	def get_queryset(self):
-		return Post.objects.select_related('author').prefetch_related('images', 'likes', 'comments', 'shares')
+		return Post.objects.select_related('author', 'community').prefetch_related('images', 'likes', 'comments', 'shares')
 
 	def get_serializer_class(self):
 		if self.request.method == 'POST':
@@ -41,8 +50,20 @@ class PostListCreateView(generics.ListCreateAPIView):
 class PostDetailView(generics.RetrieveAPIView):
 	permission_classes = [IsAuthenticated]
 	serializer_class = PostSerializer
-	queryset = Post.objects.select_related('author').prefetch_related('images', 'likes', 'comments', 'shares')
+	queryset = Post.objects.select_related('author', 'community').prefetch_related('images', 'likes', 'comments', 'shares')
 	lookup_field = 'id'
+
+
+class UserPostListView(generics.ListAPIView):
+	permission_classes = [IsAuthenticated]
+	serializer_class = PostSerializer
+
+	def get_queryset(self):
+		return (
+			Post.objects.select_related('author', 'community')
+			.prefetch_related('images', 'likes', 'comments', 'shares')
+			.filter(author_id=self.kwargs['user_id'])
+		)
 
 
 class PostLikeToggleView(APIView):
@@ -128,3 +149,88 @@ class PostShareCreateView(APIView):
 			)
 
 		return Response({'shares_count': post.shares.count()}, status=201)
+
+
+class PostUploadUrlsView(APIView):
+	permission_classes = [IsAuthenticated]
+
+	def post(self, request):
+		serializer = PostUploadIntentCreateSerializer(data=request.data)
+		serializer.is_valid(raise_exception=True)
+
+		base = (settings.SUPABASE_URL or '').rstrip('/')
+		if not base:
+			return Response({'detail': 'SUPABASE_URL is not configured.'}, status=500)
+		expires_at = timezone.now() + timedelta(minutes=POST_UPLOAD_INTENT_TTL_MINUTES)
+		uploads = []
+
+		for file_payload in serializer.validated_data['files']:
+			ext = os.path.splitext(file_payload['file_name'])[1].lower()
+			if not ext:
+				ext = '.jpg'
+
+			storage_path = f'{request.user.id}/{uuid.uuid4().hex}{ext}'
+			PostUploadIntent.objects.create(
+				user=request.user,
+				storage_path=storage_path,
+				content_type=file_payload['content_type'],
+				size_bytes=file_payload['size_bytes'],
+				expires_at=expires_at,
+			)
+
+			uploads.append(
+				{
+					'storage_path': storage_path,
+					'upload_url': f'{base}/storage/v1/object/posts_media/{storage_path}',
+					'public_url': f'{base}/storage/v1/object/public/posts_media/{storage_path}',
+					'content_type': file_payload['content_type'],
+					'max_size_bytes': 1024 * 1024,
+					'expires_at': expires_at,
+				}
+			)
+
+		return Response({'uploads': uploads}, status=201)
+
+
+class CommunityListView(generics.ListAPIView):
+	permission_classes = [IsAuthenticated]
+	serializer_class = CommunitySerializer
+
+	def get_queryset(self):
+		return Community.objects.prefetch_related('memberships')
+
+
+class JoinedCommunityListView(generics.ListAPIView):
+	permission_classes = [IsAuthenticated]
+	serializer_class = CommunitySerializer
+
+	def get_queryset(self):
+		return Community.objects.prefetch_related('memberships').filter(memberships__user=self.request.user)
+
+
+class CommunityToggleJoinView(APIView):
+	permission_classes = [IsAuthenticated]
+
+	def post(self, request, community_id):
+		community = generics.get_object_or_404(Community, id=community_id)
+		membership = CommunityMembership.objects.filter(community=community, user=request.user).first()
+
+		if membership:
+			membership.delete()
+			return Response({'is_joined': False, 'members_count': community.memberships.count()})
+
+		CommunityMembership.objects.create(community=community, user=request.user)
+		return Response({'is_joined': True, 'members_count': community.memberships.count()}, status=201)
+
+
+class CommunityPostListView(generics.ListAPIView):
+	permission_classes = [IsAuthenticated]
+	serializer_class = PostSerializer
+
+	def get_queryset(self):
+		community_id = self.kwargs['community_id']
+		return (
+			Post.objects.select_related('author', 'community')
+			.prefetch_related('images', 'likes', 'comments', 'shares')
+			.filter(community_id=community_id)
+		)
