@@ -53,3 +53,12 @@ export interface SocialNotification {
   isRead: boolean;
   createdAt: string;
 }
+
+export interface Community {
+  id: string;
+  name: string;
+  description: string;
+  membersCount: number;
+  isJoined: boolean;
+  createdAt: string;
+}

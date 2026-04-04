@@ -218,6 +218,62 @@ export async function markAllNotificationsRead() {
   });
 }
 
+import type { Community } from '@/types/social';
+
+interface BackendCommunity {
+  id: string;
+  name: string;
+  description: string;
+  members_count: number;
+  is_joined: boolean;
+  created_at: string;
+}
+
+export async function fetchCommunities(): Promise<Community[]> {
+  const data = await apiRequest<BackendCommunity[]>('/api/communities/');
+  return data.map(c => ({
+    id: c.id,
+    name: c.name,
+    description: c.description,
+    membersCount: c.members_count,
+    isJoined: c.is_joined,
+    createdAt: c.created_at,
+  }));
+}
+
+export async function fetchJoinedCommunities(): Promise<Community[]> {
+  const data = await apiRequest<BackendCommunity[]>('/api/communities/joined/');
+  return data.map(c => ({
+    id: c.id,
+    name: c.name,
+    description: c.description,
+    membersCount: c.members_count,
+    isJoined: c.is_joined,
+    createdAt: c.created_at,
+  }));
+}
+
+export async function createCommunity(name: string, description: string): Promise<Community> {
+  const c = await apiRequest<BackendCommunity>('/api/communities/', {
+    method: 'POST',
+    body: JSON.stringify({ name, description }),
+  });
+  return {
+    id: c.id,
+    name: c.name,
+    description: c.description,
+    membersCount: c.members_count,
+    isJoined: c.is_joined,
+    createdAt: c.created_at,
+  };
+}
+
+export async function toggleJoinCommunity(communityId: string) {
+  return apiRequest<{ is_joined: boolean; members_count: number }>(`/api/communities/${communityId}/toggle-join/`, {
+    method: 'POST',
+  });
+}
+
 export function buildStoriesFromPosts(posts: FeedPost[], currentUserName?: string, currentUserAvatar?: string): StoryItem[] {
   const stories: StoryItem[] = [];
 
