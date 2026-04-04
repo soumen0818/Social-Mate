@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { supabase } from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { API_BASE_URL } from '../lib/api';
@@ -7,6 +9,8 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 
 WebBrowser.maybeCompleteAuthSession();
+
+const explicitOAuthRedirect = process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL;
 
 export interface User {
   id: string;
@@ -153,7 +157,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signInWithGoogle() {
-    const redirectTo = Linking.createURL('/auth/callback');
+    const isExpoGo = Constants.appOwnership === 'expo';
+    const fallbackRedirect = Platform.OS === 'web'
+      ? Linking.createURL('/auth/callback')
+      : isExpoGo
+        ? Linking.createURL('/auth/callback')
+        : Linking.createURL('/auth/callback', { scheme: 'frontend' });
+
+    const redirectTo = explicitOAuthRedirect || fallbackRedirect;
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',

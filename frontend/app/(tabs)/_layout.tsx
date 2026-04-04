@@ -1,8 +1,10 @@
 import { Tabs } from 'expo-router';
 import { View, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { Shadow } from '@/constants/AppTheme';
+import { HapticTab } from '@/components/haptic-tab';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -15,12 +17,22 @@ function TabIcon({ name, focused }: { name: IconName; focused: boolean }) {
 }
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
-        tabBarStyle: styles.tabBar,
+        tabBarButton: (props) => <HapticTab {...props} />,
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            height: 58 + insets.bottom,
+            paddingBottom: Math.max(8, insets.bottom),
+            paddingTop: 8,
+          },
+        ],
       }}
     >
       <Tabs.Screen
@@ -30,15 +42,15 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="add-friend"
+        name="search"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon name={focused ? 'person-add' : 'person-add-outline'} focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon name={focused ? 'search' : 'search-outline'} focused={focused} />,
         }}
       />
       <Tabs.Screen
-        name="jobs"
+        name="add-post"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon name={focused ? 'briefcase' : 'briefcase-outline'} focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon name={focused ? 'add-circle' : 'add-circle-outline'} focused={focused} />,
         }}
       />
       <Tabs.Screen
@@ -62,9 +74,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.tab.background,
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
-    height: Platform.OS === 'ios' ? 84 : 64,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
-    paddingTop: 8,
+    paddingHorizontal: Platform.OS === 'ios' ? 10 : 4,
     ...Shadow.md,
   },
   iconWrap: {

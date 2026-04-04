@@ -17,7 +17,7 @@ import { Colors } from '@/constants/Colors';
 import { BorderRadius, FontSize, FontWeight, Shadow, Spacing } from '@/constants/AppTheme';
 import type { FollowUser } from '@/types/social';
 
-export default function AddFriendScreen() {
+export default function SearchPeopleScreen() {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [people, setPeople] = useState<FollowUser[]>([]);
@@ -58,12 +58,10 @@ export default function AddFriendScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>People You May Know</Text>
+        <Text style={styles.headerTitle}>Search People</Text>
       </View>
 
-      {/* Search */}
       <View style={styles.searchWrap}>
         <Ionicons name="search-outline" size={18} color={Colors.text.muted} style={styles.searchIcon} />
         <TextInput

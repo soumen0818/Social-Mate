@@ -106,13 +106,6 @@ export const MOCK_GROUPS = [
   { id: '5', name: 'Photography Central', cover: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=200&q=80', members: 61000, isJoined: false, category: 'Lifestyle' },
 ];
 
-export const MOCK_JOBS = [
-  { id: '1', title: 'Senior React Developer', company: 'TechCorp Inc.', location: 'Remote', salary: '$120k–$150k', type: 'Full-time', logo: 'https://i.pravatar.cc/80?img=62', postedAt: '2 hours ago', isBookmarked: false },
-  { id: '2', title: 'Mobile App Engineer', company: 'StartupHub', location: 'New York, USA', salary: '$90k–$140k', type: 'Full-time', logo: 'https://i.pravatar.cc/80?img=63', postedAt: '5 hours ago', isBookmarked: true },
-  { id: '3', title: 'Product Manager', company: 'Innovation Labs', location: 'San Francisco, CA', salary: '$130k–$180k', type: 'Full-time', logo: 'https://i.pravatar.cc/80?img=64', postedAt: '1 day ago', isBookmarked: false },
-  { id: '4', title: 'UX/UI Designer', company: 'WebFlow Agency', location: 'Remote', salary: '$80k–$110k', type: 'Contract', logo: 'https://i.pravatar.cc/80?img=65', postedAt: '2 days ago', isBookmarked: false },
-];
-
 export const LIKE_AVATARS = [
   'https://i.pravatar.cc/40?img=1',
   'https://i.pravatar.cc/40?img=2',

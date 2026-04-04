@@ -41,6 +41,13 @@ export default function GroupsScreen() {
         </TouchableOpacity>
       </View>
 
+      <View style={styles.infoBanner}>
+        <Ionicons name="people-circle-outline" size={16} color={Colors.primary} />
+        <Text style={styles.infoText}>
+          Join communities and share posts with members. Group posts will also appear on your profile.
+        </Text>
+      </View>
+
       {/* Sub tabs */}
       <View style={styles.subTabs}>
         {(['discover', 'joined'] as const).map(t => (
@@ -104,6 +111,20 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, color: Colors.text.primary },
   createBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  infoBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.xs,
+    backgroundColor: Colors.background,
+    paddingHorizontal: Spacing.base,
+    paddingBottom: Spacing.sm,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: FontSize.xs,
+    color: Colors.text.secondary,
+    lineHeight: 18,
+  },
   subTabs: {
     flexDirection: 'row',
     backgroundColor: Colors.background,

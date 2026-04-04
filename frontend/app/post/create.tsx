@@ -1,39 +1,85 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  ScrollView, KeyboardAvoidingView, Platform,
+  ScrollView, KeyboardAvoidingView, Platform, Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import Avatar from '@/components/ui/Avatar';
 import { useAuth } from '@/context/AuthContext';
 import { createPost } from '@/lib/socialApi';
 import { Colors } from '@/constants/Colors';
 import { BorderRadius, FontSize, FontWeight, Spacing } from '@/constants/AppTheme';
 
-interface PostOption {
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  label: string;
-  color: string;
-}
+const MAX_IMAGES = 2;
+const MAX_IMAGE_SIZE_BYTES = 1024 * 1024;
 
-const OPTIONS: PostOption[] = [
-  { icon: 'image-outline', label: 'Add A Photo', color: '#1D7FE8' },
-  { icon: 'videocam-outline', label: 'Add A Video', color: '#7B2FFF' },
-  { icon: 'document-attach-outline', label: 'Add A Document', color: '#F59E0B' },
-  { icon: 'color-palette-outline', label: 'Background Color', color: '#EC4899' },
-  { icon: 'happy-outline', label: 'Add Gif', color: '#22C55E' },
-  { icon: 'radio-outline', label: 'Live Video', color: '#EF4444' },
-  { icon: 'camera-outline', label: 'Camera', color: '#0EA5E9' },
-];
+type PickedImage = {
+  uri: string;
+  fileName?: string | null;
+  fileSize?: number;
+};
 
 export default function CreatePostScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [content, setContent] = useState('');
+  const [images, setImages] = useState<PickedImage[]>([]);
   const audience = 'Public';
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handlePickImages() {
+    if (images.length >= MAX_IMAGES) {
+      Alert.alert('Limit reached', 'You can add up to 2 images only.');
+      return;
+    }
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Please allow media library permission to add images.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      quality: 0.9,
+      selectionLimit: MAX_IMAGES - images.length,
+    });
+
+    if (result.canceled) {
+      return;
+    }
+
+    const newImages = result.assets.map((asset) => ({
+      uri: asset.uri,
+      fileName: asset.fileName,
+      fileSize: asset.fileSize,
+    }));
+
+    const tooLarge = newImages.find((image) => (image.fileSize ?? 0) > MAX_IMAGE_SIZE_BYTES);
+    if (tooLarge) {
+      Alert.alert('File too large', 'Each image must be 1MB or less.');
+      return;
+    }
+
+    if (newImages.some((image) => image.fileSize == null)) {
+      Alert.alert('File size unavailable', 'Please pick a different image under 1MB.');
+      return;
+    }
+
+    setImages((prev) => [...prev, ...newImages].slice(0, MAX_IMAGES));
+  }
+
+  function handleRemoveImage(uri: string) {
+    setImages((prev) => prev.filter((image) => image.uri !== uri));
+  }
+
+  function handleClose() {
+    router.replace('/(tabs)/index');
+  }
 
   async function handlePost() {
     if (!content.trim() || isSubmitting) {
@@ -43,7 +89,7 @@ export default function CreatePostScreen() {
     try {
       setIsSubmitting(true);
       await createPost(content.trim());
-      router.back();
+      router.replace('/(tabs)/index');
     } finally {
       setIsSubmitting(false);
     }
@@ -54,7 +100,7 @@ export default function CreatePostScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
+          <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
             <Ionicons name="close" size={24} color={Colors.text.primary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Create a Post</Text>
@@ -98,16 +144,32 @@ export default function CreatePostScreen() {
           {/* Drag handle */}
           <View style={styles.handle} />
 
-          {/* Options */}
           <View style={styles.options}>
-            {OPTIONS.map((opt) => (
-              <TouchableOpacity key={opt.label} style={styles.option} activeOpacity={0.7}>
-                <View style={[styles.optionIcon, { backgroundColor: `${opt.color}18` }]}>
-                  <Ionicons name={opt.icon} size={20} color={opt.color} />
-                </View>
-                <Text style={styles.optionLabel}>{opt.label}</Text>
-              </TouchableOpacity>
-            ))}
+            <TouchableOpacity style={styles.option} activeOpacity={0.8} onPress={handlePickImages}>
+              <View style={[styles.optionIcon, { backgroundColor: '#1D7FE818' }]}>
+                <Ionicons name="image-outline" size={20} color="#1D7FE8" />
+              </View>
+              <View style={styles.optionTextWrap}>
+                <Text style={styles.optionLabel}>Add Photos</Text>
+                <Text style={styles.optionHint}>Only images. Max 2 files, 1MB each.</Text>
+              </View>
+            </TouchableOpacity>
+
+            {images.length > 0 && (
+              <View style={styles.previewGrid}>
+                {images.map((image) => (
+                  <View key={image.uri} style={styles.previewItem}>
+                    <Image source={{ uri: image.uri }} style={styles.previewImage} />
+                    <TouchableOpacity
+                      onPress={() => handleRemoveImage(image.uri)}
+                      style={styles.removePreviewBtn}
+                    >
+                      <Ionicons name="close" size={14} color={Colors.text.white} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -157,9 +219,42 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     borderBottomWidth: 1, borderBottomColor: '#F5F5F5',
   },
+  optionTextWrap: { flex: 1 },
   optionIcon: {
     width: 40, height: 40, borderRadius: BorderRadius.sm,
     alignItems: 'center', justifyContent: 'center',
   },
   optionLabel: { fontSize: FontSize.md, color: Colors.text.primary, fontWeight: FontWeight.medium },
+  optionHint: {
+    marginTop: 2,
+    fontSize: FontSize.sm,
+    color: Colors.text.muted,
+  },
+  previewGrid: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  previewItem: {
+    width: 92,
+    height: 92,
+    borderRadius: BorderRadius.sm,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  removePreviewBtn: {
+    position: 'absolute',
+    right: 6,
+    top: 6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
