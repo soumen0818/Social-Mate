@@ -5,6 +5,7 @@ export interface FeedPost {
   authorAvatar: string;
   content: string;
   imageUrl?: string;
+  imageUrls?: string[];
   likes: number;
   comments: number;
   shares: number;

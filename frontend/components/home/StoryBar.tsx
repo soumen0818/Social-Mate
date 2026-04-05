@@ -1,7 +1,9 @@
-import React from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Modal } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadStory } from '@/lib/socialApi';
+import { supabase } from '@/lib/supabase';
+import { decode } from 'base64-arraybuffer';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
@@ -10,9 +12,12 @@ import type { StoryItem } from '@/types/social';
 
 interface StoryBarProps {
   stories: StoryItem[];
+  onStoryUploaded?: () => void;
 }
 
-export default function StoryBar({ stories }: StoryBarProps) {
+export default function StoryBar({ stories, onStoryUploaded }: StoryBarProps) {
+  const [uploading, setUploading] = useState(false);
+
   const handleAddStory = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
@@ -23,17 +28,48 @@ export default function StoryBar({ stories }: StoryBarProps) {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.8,
+      base64: true,
     });
 
     if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      if (!asset.base64) {
+        Alert.alert('Error', 'Could not read image data.');
+        return;
+      }
+
+      setUploading(true);
       try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) throw new Error('Not logged in');
+
+        // Step 1: Upload the image to Supabase Storage
+        const ext = (asset.fileName || 'story.jpg').split('.').pop()?.toLowerCase() || 'jpg';
+        const contentType = `image/${ext === 'png' ? 'png' : 'jpeg'}`;
+        const storagePath = `${session.user.id}/stories/story_${Date.now()}.${ext}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('posts_media')
+          .upload(storagePath, decode(asset.base64), {
+            contentType,
+            upsert: false,
+          });
+
+        if (uploadError) throw uploadError;
+
+        // Step 2: Create the story in backend with the storage_path
         await uploadStory({
-          image_url: result.assets[0].uri, // Simulate upload mapping in backend via presigned or simply storing uri for demo
-          text: 'New Story',
+          storage_path: storagePath,
+          text: '',
         });
+
         Alert.alert('Success', 'Story uploaded successfully!');
-      } catch {
-        Alert.alert('Error', 'Failed to upload story');
+        onStoryUploaded?.();
+      } catch (e: any) {
+        console.error('Story upload error:', e);
+        Alert.alert('Error', e.message || 'Failed to upload story');
+      } finally {
+        setUploading(false);
       }
     }
   };
@@ -50,10 +86,15 @@ export default function StoryBar({ stories }: StoryBarProps) {
           style={styles.storyItem}
           activeOpacity={0.8}
           onPress={story.isOwn ? handleAddStory : undefined}
+          disabled={uploading && story.isOwn}
         >
           {story.isOwn ? (
             <View style={styles.addStoryCircle}>
-              <Ionicons name="add" size={28} color={Colors.primary} />
+              {uploading ? (
+                <ActivityIndicator size="small" color={Colors.primary} />
+              ) : (
+                <Ionicons name="add" size={28} color={Colors.primary} />
+              )}
             </View>
           ) : (
             <LinearGradient

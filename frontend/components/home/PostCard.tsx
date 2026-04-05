@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import {
+  View, Text, Image, TouchableOpacity, StyleSheet, Alert,
+  ScrollView, Modal, Dimensions, Pressable,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
@@ -7,20 +10,90 @@ import Avatar from '@/components/ui/Avatar';
 import { Colors } from '@/constants/Colors';
 import { BorderRadius, FontSize, FontWeight, Shadow, Spacing } from '@/constants/AppTheme';
 import type { FeedPost } from '@/types/social';
-import { togglePostBookmark, deletePost } from '@/lib/socialApi';
+import { togglePostBookmark, deletePost, getSignedImageUrl } from '@/lib/socialApi';
 
-/** Renders a post image with onError fallback — hides itself if the URL is broken */
-function PostImage({ uri }: { uri: string }) {
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+/** Renders a post image with automatic signed-URL fallback for private Storage buckets */
+function PostImage({ uri, onPress }: { uri: string; onPress?: () => void }) {
+  const [currentUri, setCurrentUri] = useState(uri);
   const [failed, setFailed] = useState(false);
-  useEffect(() => { setFailed(false); }, [uri]);
-  if (failed) return null;
+  const [triedSigned, setTriedSigned] = useState(false);
+
+  useEffect(() => {
+    setCurrentUri(uri);
+    setFailed(false);
+    setTriedSigned(false);
+  }, [uri]);
+
+  const handleError = async () => {
+    if (!triedSigned) {
+      const match = uri.match(/posts_media\/(.+?)(\?|$)/);
+      if (match) {
+        setTriedSigned(true);
+        const signedUrl = await getSignedImageUrl(match[1]);
+        if (signedUrl) {
+          setCurrentUri(signedUrl);
+          return;
+        }
+      }
+      setFailed(true);
+    } else {
+      setFailed(true);
+    }
+  };
+
+  if (failed || !currentUri) return null;
   return (
-    <Image
-      source={{ uri }}
-      style={styles.postImage}
-      resizeMode="cover"
-      onError={() => setFailed(true)}
-    />
+    <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
+      <Image
+        source={{ uri: currentUri }}
+        style={styles.postImage}
+        resizeMode="cover"
+        onError={handleError}
+      />
+    </TouchableOpacity>
+  );
+}
+
+/** Full-screen image zoom modal */
+function ImageZoomModal({ visible, uri, onClose }: { visible: boolean; uri: string; onClose: () => void }) {
+  const [currentUri, setCurrentUri] = useState(uri);
+  const [triedSigned, setTriedSigned] = useState(false);
+
+  useEffect(() => {
+    setCurrentUri(uri);
+    setTriedSigned(false);
+  }, [uri]);
+
+  const handleError = async () => {
+    if (!triedSigned) {
+      const match = uri.match(/posts_media\/(.+?)(\?|$)/);
+      if (match) {
+        setTriedSigned(true);
+        const signedUrl = await getSignedImageUrl(match[1]);
+        if (signedUrl) {
+          setCurrentUri(signedUrl);
+          return;
+        }
+      }
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.zoomOverlay} onPress={onClose}>
+        <TouchableOpacity style={styles.zoomCloseBtn} onPress={onClose}>
+          <Ionicons name="close" size={28} color="#FFFFFF" />
+        </TouchableOpacity>
+        <Image
+          source={{ uri: currentUri }}
+          style={styles.zoomImage}
+          resizeMode="contain"
+          onError={handleError}
+        />
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -43,6 +116,9 @@ export default function PostCard({ post, onLike, onShare, onBookmark }: PostCard
   const [likes, setLikes] = useState(post.likes);
   const [bookmarked, setBookmarked] = useState(false);
   const [shares, setShares] = useState(post.shares);
+  const [zoomImage, setZoomImage] = useState<string | null>(null);
+
+  const imageUrls = post.imageUrls || (post.imageUrl ? [post.imageUrl] : []);
 
   const handleMoreOptions = () => {
     if (user?.id === post.authorId) {
@@ -88,9 +164,7 @@ export default function PostCard({ post, onLike, onShare, onBookmark }: PostCard
     setLiked(optimisticLiked);
     setLikes(optimisticLikes);
 
-    if (!onLike) {
-      return;
-    }
+    if (!onLike) return;
 
     try {
       const result = await onLike(post.id);
@@ -106,16 +180,10 @@ export default function PostCard({ post, onLike, onShare, onBookmark }: PostCard
 
   async function handleShare() {
     setShares((prev) => prev + 1);
-
-    if (!onShare) {
-      return;
-    }
-
+    if (!onShare) return;
     try {
       const result = await onShare(post.id);
-      if (result) {
-        setShares(result.sharesCount);
-      }
+      if (result) setShares(result.sharesCount);
     } catch {
       setShares(post.shares);
     }
@@ -150,9 +218,43 @@ export default function PostCard({ post, onLike, onShare, onBookmark }: PostCard
       {/* Content */}
       <Text style={styles.content}>{post.content}</Text>
 
-      {/* Image */}
-      {post.imageUrl && (
-        <PostImage uri={post.imageUrl} />
+      {/* Images — single image or horizontal scroll for multiple */}
+      {imageUrls.length === 1 && (
+        <PostImage uri={imageUrls[0]} onPress={() => setZoomImage(imageUrls[0])} />
+      )}
+      {imageUrls.length > 1 && (
+        <ScrollView
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          style={styles.imageCarousel}
+        >
+          {imageUrls.map((url, i) => (
+            <TouchableOpacity key={i} activeOpacity={0.9} onPress={() => setZoomImage(url)}>
+              <Image
+                source={{ uri: url }}
+                style={styles.carouselImage}
+                resizeMode="cover"
+              />
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+      {imageUrls.length > 1 && (
+        <View style={styles.dotsRow}>
+          {imageUrls.map((_, i) => (
+            <View key={i} style={[styles.dot, i === 0 && styles.dotActive]} />
+          ))}
+        </View>
+      )}
+
+      {/* Zoom modal */}
+      {zoomImage && (
+        <ImageZoomModal
+          visible={!!zoomImage}
+          uri={zoomImage}
+          onClose={() => setZoomImage(null)}
+        />
       )}
 
       {/* Actions */}
@@ -207,10 +309,54 @@ const styles = StyleSheet.create({
   time: { fontSize: FontSize.xs, color: Colors.text.muted, marginTop: 2 },
   moreBtn: { padding: Spacing.xs },
   content: { fontSize: FontSize.base, color: Colors.text.primary, lineHeight: 22, marginBottom: Spacing.sm },
-  postImage: { width: '100%', height: 200, borderRadius: BorderRadius.md, marginBottom: Spacing.sm },
+  postImage: { width: '100%', height: 250, borderRadius: BorderRadius.md, marginBottom: Spacing.sm },
+  imageCarousel: { marginBottom: Spacing.xs },
+  carouselImage: {
+    width: SCREEN_WIDTH - (Spacing.base * 4),
+    height: 250,
+    borderRadius: BorderRadius.md,
+    marginRight: Spacing.sm,
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: Spacing.sm,
+  },
+  dot: {
+    width: 6, height: 6, borderRadius: 3,
+    backgroundColor: Colors.border,
+  },
+  dotActive: {
+    backgroundColor: Colors.primary,
+    width: 8, height: 8, borderRadius: 4,
+  },
   actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.border },
   leftActions: { flexDirection: 'row', gap: Spacing.base },
   action: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   actionText: { fontSize: FontSize.sm, color: Colors.text.secondary, fontWeight: FontWeight.medium },
   actionTextActive: { color: Colors.primary },
+  // Zoom modal
+  zoomOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  zoomCloseBtn: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  zoomImage: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_WIDTH,
+  },
 });

@@ -195,16 +195,15 @@ class PostUploadUrlsView(APIView):
 
 
 class CommunityListView(generics.ListCreateAPIView):
-        permission_classes = [IsAuthenticated]
-        serializer_class = CommunitySerializer
+    permission_classes = [IsAuthenticated]
+    serializer_class = CommunitySerializer
 
-        def get_queryset(self):
-                return Community.objects.prefetch_related('memberships')
+    def get_queryset(self):
+        return Community.objects.prefetch_related('memberships')
 
-        def perform_create(self, serializer):
-                community = serializer.save(created_by=self.request.user)
-                # Auto-join the creator
-                CommunityMembership.objects.create(community=community, user=self.request.user)
+    def perform_create(self, serializer):
+        community = serializer.save(created_by=self.request.user)
+        CommunityMembership.objects.create(community=community, user=self.request.user)
 
 
 class JoinedCommunityListView(generics.ListAPIView):
@@ -241,15 +240,43 @@ class CommunityPostListView(generics.ListAPIView):
             .prefetch_related('images', 'likes', 'comments', 'shares')
             .filter(community_id=community_id)
         )
+
+
 class StoryListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = StorySerializer
 
     def get_queryset(self):
-        return Story.objects.filter(expires_at__gt=timezone.now()).select_related('user')
+        from follows.models import Follow
+        # Only return stories from people the user follows + their own (like Instagram)
+        following_ids = Follow.objects.filter(
+            follower=self.request.user
+        ).values_list('following_id', flat=True)
+        allowed_users = list(following_ids) + [self.request.user.id]
+        return (
+            Story.objects
+            .filter(expires_at__gt=timezone.now(), user_id__in=allowed_users)
+            .select_related('user')
+        )
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+    def create(self, request, *args, **kwargs):
+        storage_path = request.data.get('storage_path', '')
+        text = request.data.get('text', '')
+        image_url = request.data.get('image_url', '')
+
+        # If a storage_path was provided (frontend uploaded to Supabase), construct the public URL
+        if storage_path:
+            base = (settings.SUPABASE_URL or '').rstrip('/')
+            image_url = f'{base}/storage/v1/object/public/posts_media/{storage_path}'
+
+        story = Story.objects.create(
+            user=request.user,
+            storage_path=storage_path,
+            image_url=image_url,
+            text=text,
+        )
+        return Response(StorySerializer(story).data, status=201)
+
 
 class BookmarkListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]

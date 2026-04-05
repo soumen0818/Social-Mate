@@ -3,7 +3,7 @@ from django.utils import timezone
 from rest_framework import serializers
 from posts.models import Comment, Community, CommunityMembership, Post, PostImage, PostUploadIntent, Share, Story, Bookmark
 
-MAX_POST_IMAGES = 2
+MAX_POST_IMAGES = 3
 MAX_IMAGE_SIZE_BYTES = 1024 * 1024
 POST_UPLOAD_INTENT_TTL_MINUTES = 30
 
@@ -70,7 +70,7 @@ class PostCreateSerializer(serializers.ModelSerializer):
     def validate_uploaded_paths(self, value):
         unique_paths = list(dict.fromkeys(value))
         if len(unique_paths) > MAX_POST_IMAGES:
-            raise serializers.ValidationError('You can attach up to 2 images per post.')
+            raise serializers.ValidationError('You can attach up to 3 images per post.')
         return unique_paths
 
     def validate_community_id(self, value):
@@ -158,7 +158,7 @@ class PostUploadIntentCreateSerializer(serializers.Serializer):
         if not value:
             raise serializers.ValidationError('At least one image is required.')
         if len(value) > MAX_POST_IMAGES:
-            raise serializers.ValidationError('You can upload up to 2 images per post.')
+            raise serializers.ValidationError('You can upload up to 3 images per post.')
         return value
 
 

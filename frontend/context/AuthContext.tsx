@@ -108,21 +108,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
         },
       });
 
       if (!response.ok) {
+        console.warn('[syncProfile] Backend returned', response.status);
         setUser(fallbackUser);
         return;
       }
 
       const profile = await response.json();
+
+      // Append cache-buster to avatar URL so React Native Image doesn't
+      // serve a stale cached version after the user uploads a new one
+      let avatarUrl = profile.avatar_url || '';
+      if (avatarUrl) {
+        const separator = avatarUrl.includes('?') ? '&' : '?';
+        avatarUrl = `${avatarUrl}${separator}t=${Date.now()}`;
+      }
+
+      console.log('[syncProfile] avatar_url from backend:', profile.avatar_url);
+      console.log('[syncProfile] cache-busted avatar:', avatarUrl);
+
       setUser({
         id: profile.id || fallbackUser.id,
         email: profile.email || fallbackUser.email,
         name: profile.display_name || fallbackUser.name,
         username: profile.username || fallbackUser.username,
-        avatar: profile.avatar_url || fallbackUser.avatar,
+        avatar: avatarUrl || fallbackUser.avatar,
         bio: profile.bio || '',
         gender: profile.gender || '',
         website: profile.website || '',
@@ -131,7 +146,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         posts: profile.posts_count || 0,
         photos: profile.posts_count || 0,
       });
-    } catch {
+    } catch (err) {
+      console.warn('[syncProfile] Error:', err);
       setUser(fallbackUser);
     }
   }

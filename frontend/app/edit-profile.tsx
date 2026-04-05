@@ -112,7 +112,11 @@ function EditProfileScreen() {
         throw new Error('Failed to update profile. Check your website URL and try again.');
       }
 
+      // Re-sync profile from the backend so all screens pick up the new avatar/data
       await syncProfile(session.user, session.access_token);
+
+      // Small delay to allow React context to propagate the new user state before navigating
+      await new Promise(resolve => setTimeout(resolve, 150));
 
       Alert.alert('Success', 'Profile updated successfully!', [
         { text: 'OK', onPress: () => router.back() }
@@ -125,7 +129,7 @@ function EditProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerIconBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color={Colors.text.primary} />

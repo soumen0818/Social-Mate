@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   ScrollView, KeyboardAvoidingView, Platform, Alert, Image, ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -15,7 +15,7 @@ import { supabase } from '@/lib/supabase';
 import { API_BASE_URL } from '@/lib/api';
 import { decode } from 'base64-arraybuffer';
 
-const MAX_IMAGES = 2;
+const MAX_IMAGES = 3;
 
 type PickedImage = {
   uri: string;
@@ -26,6 +26,7 @@ type PickedImage = {
 
 export default function CreatePostScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [content, setContent] = useState('');
   const [images, setImages] = useState<PickedImage[]>([]);
@@ -34,7 +35,7 @@ export default function CreatePostScreen() {
 
   async function handlePickImages() {
     if (images.length >= MAX_IMAGES) {
-      Alert.alert('Limit reached', 'You can add up to 2 images only.');
+      Alert.alert('Limit reached', 'You can add up to 3 images only.');
       return;
     }
 
@@ -245,7 +246,7 @@ export default function CreatePostScreen() {
         </ScrollView>
 
         {/* Bottom toolbar */}
-        <View style={styles.toolbar}>
+        <View style={[styles.toolbar, { paddingBottom: Math.max(insets.bottom, Spacing.sm) }]}>
           <TouchableOpacity
             style={[styles.toolbarBtn, images.length >= MAX_IMAGES && styles.toolbarBtnDisabled]}
             onPress={handlePickImages}

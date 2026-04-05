@@ -4,6 +4,7 @@ import type { FeedComment, FeedPost, FollowUser, StoryItem, SocialNotification, 
 
 interface BackendPostImage {
   image_url: string;
+  storage_path?: string;
 }
 
 interface BackendPost {
@@ -46,14 +47,45 @@ function defaultAvatar(seed: string) {
   return `https://i.pravatar.cc/150?u=${encodeURIComponent(seed)}`;
 }
 
+/**
+ * Resolve image URL from a backend post image.
+ * Uses the Supabase client's getPublicUrl (same method that works for avatars)
+ * to construct the canonical URL from storage_path. Falls back to image_url.
+ */
+function resolveImageUrl(img: BackendPostImage): string {
+  if (img.storage_path) {
+    const { data } = supabase.storage.from('posts_media').getPublicUrl(img.storage_path);
+    return data.publicUrl;
+  }
+  return img.image_url;
+}
+
+/**
+ * Async fallback: create a signed URL for private buckets.
+ * Call this if the public URL returns 403.
+ */
+export async function getSignedImageUrl(storagePath: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.storage
+      .from('posts_media')
+      .createSignedUrl(storagePath, 3600); // 1 hour expiry
+    if (error || !data?.signedUrl) return null;
+    return data.signedUrl;
+  } catch {
+    return null;
+  }
+}
+
 export function mapPost(post: BackendPost): FeedPost {
+  const allImageUrls = (post.images || []).map(resolveImageUrl);
   return {
     id: post.id,
     authorId: post.author_id,
     authorName: post.author_display_name || post.author_username,
     authorAvatar: post.author_avatar_url || defaultAvatar(post.author_id),
     content: post.caption || '',
-    imageUrl: post.images[0]?.image_url,
+    imageUrl: allImageUrls[0],
+    imageUrls: allImageUrls.length > 0 ? allImageUrls : undefined,
     likes: post.likes_count,
     comments: post.comments_count,
     shares: post.shares_count,
@@ -362,7 +394,7 @@ export async function fetchStories(): Promise<any[]> {
   return apiRequest('/api/stories/');
 }
 
-export async function uploadStory(data: { text?: string, image_url?: string }): Promise<any> {
+export async function uploadStory(data: { text?: string; image_url?: string; storage_path?: string }): Promise<any> {
   return apiRequest('/api/stories/', {
     method: 'POST',
     body: JSON.stringify(data)

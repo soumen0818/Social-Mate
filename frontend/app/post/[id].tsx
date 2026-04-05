@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, Image, TouchableOpacity,
   TextInput, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Avatar from '@/components/ui/Avatar';
@@ -55,6 +55,7 @@ function CommentItem({ comment }: { comment: FeedComment }) {
 
 export default function PostDetailScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [post, setPost] = useState<FeedPost | null>(null);
   const [comments, setComments] = useState<FeedComment[]>([]);
@@ -179,7 +180,7 @@ export default function PostDetailScreen() {
         </ScrollView>
 
         {/* Comment input */}
-        <View style={styles.inputBar}>
+        <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, Spacing.sm) }]}>
           <TouchableOpacity style={styles.inputBarAction}>
             <Ionicons name="attach-outline" size={22} color={Colors.text.secondary} />
           </TouchableOpacity>

@@ -48,7 +48,7 @@ function SettingsScreen() {
   ];
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       {/* Background Gradient/Image (soft fade) */}
       <View style={styles.bgGradient} />
 

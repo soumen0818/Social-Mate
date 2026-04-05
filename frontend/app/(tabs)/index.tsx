@@ -138,7 +138,7 @@ export default function HomeScreen() {
 
         {/* Stories */}
         <View style={styles.section}>
-          <StoryBar stories={stories} />
+          <StoryBar stories={stories} onStoryUploaded={loadStories} />
         </View>
 
         {/* Feed */}
