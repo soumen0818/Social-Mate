@@ -18,6 +18,7 @@ interface BackendPost {
   likes_count: number;
   comments_count: number;
   shares_count: number;
+  is_liked?: boolean;
   created_at: string;
 }
 
@@ -90,7 +91,7 @@ export function mapPost(post: BackendPost): FeedPost {
     comments: post.comments_count,
     shares: post.shares_count,
     createdAt: post.created_at,
-    isLiked: false,
+    isLiked: post.is_liked ?? false,
   };
 }
 
@@ -216,6 +217,20 @@ export async function toggleFollow(userId: string) {
   return apiRequest<{ is_following: boolean }>(`/api/follows/${userId}/toggle/`, {
     method: 'POST',
   });
+}
+
+/** Discover/search all users on the platform (excludes current user). */
+export async function fetchDiscoverUsers(search: string = ''): Promise<FollowUser[]> {
+  const query = search ? `?search=${encodeURIComponent(search)}` : '';
+  const data = await apiRequest<any[]>(`/api/users/${query}`);
+  return data.map((u) => ({
+    id: u.id,
+    username: u.username,
+    displayName: u.display_name || u.username,
+    avatarUrl: u.avatar_url || defaultAvatar(u.id),
+    isFollowing: u.is_following ?? false,
+    followersCount: u.followers_count || 0,
+  }));
 }
 
 interface BackendNotification {

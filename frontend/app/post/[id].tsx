@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Image, TouchableOpacity,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Avatar from '@/components/ui/Avatar';
-import { createPostComment, fetchPostById, fetchPostComments } from '@/lib/socialApi';
+import { createPostComment, fetchPostById, fetchPostComments, togglePostLike } from '@/lib/socialApi';
 import { Colors } from '@/constants/Colors';
 import { BorderRadius, FontSize, FontWeight, Spacing } from '@/constants/AppTheme';
 import type { FeedComment, FeedPost } from '@/types/social';
@@ -40,14 +40,11 @@ function CommentItem({ comment }: { comment: FeedComment }) {
     <View style={styles.commentWrap}>
       <Avatar uri={comment.avatarUrl} name={comment.displayName} size={36} />
       <View style={styles.commentBody}>
-        <Text style={styles.commentName}>{comment.displayName}</Text>
-        <Text style={styles.commentTime}>{formatRelativeTime(comment.createdAt)}</Text>
-        <Text style={styles.commentText}>{comment.text}</Text>
-        <View style={styles.commentActions}>
-          <TouchableOpacity style={styles.commentAction}>
-            <Text style={styles.commentActionText}>like</Text>
-          </TouchableOpacity>
+        <View style={styles.commentHeader}>
+          <Text style={styles.commentName}>{comment.displayName}</Text>
+          <Text style={styles.commentTime}>{formatRelativeTime(comment.createdAt)}</Text>
         </View>
+        <Text style={styles.commentText}>{comment.text}</Text>
       </View>
     </View>
   );
@@ -62,6 +59,8 @@ export default function PostDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [submittingComment, setSubmittingComment] = useState(false);
   const [commentText, setCommentText] = useState('');
+  const [liked, setLiked] = useState(false);
+  const [likesCount, setLikesCount] = useState(0);
 
   useEffect(() => {
     if (!id) {
@@ -80,6 +79,8 @@ export default function PostDetailScreen() {
         fetchPostComments(postId),
       ]);
       setPost(postData);
+      setLiked(postData.isLiked);
+      setLikesCount(postData.likes);
       setComments(commentData);
     } catch {
       setPost(null);
@@ -89,7 +90,23 @@ export default function PostDetailScreen() {
     }
   }
 
-  const likeAvatars = useMemo(() => comments.slice(0, 5).map((item) => item.avatarUrl), [comments]);
+  async function handleLike() {
+    if (!id) return;
+    // Optimistic update
+    const prevLiked = liked;
+    const prevCount = likesCount;
+    setLiked(!liked);
+    setLikesCount(liked ? likesCount - 1 : likesCount + 1);
+
+    try {
+      const result = await togglePostLike(String(id));
+      setLiked(result.is_liked);
+      setLikesCount(result.likes_count);
+    } catch {
+      setLiked(prevLiked);
+      setLikesCount(prevCount);
+    }
+  }
 
   async function handleSubmitComment() {
     if (!id || !commentText.trim() || submittingComment) {
@@ -134,59 +151,69 @@ export default function PostDetailScreen() {
 
           {!loading && !post && (
             <View style={styles.loadingWrap}>
-              <Text style={styles.sortText}>Post not found.</Text>
+              <Text style={styles.mutedText}>Post not found.</Text>
             </View>
           )}
 
           {!loading && post && (
             <>
-          {/* Likes section */}
-          <View style={styles.likesSection}>
-            <Text style={styles.sectionLabel}>Like</Text>
-            <View style={styles.likeAvatars}>
-              {likeAvatars.map((uri, i) => (
-                <Image
-                  key={i}
-                  source={{ uri }}
-                  style={[styles.likeAvatar, { marginLeft: i > 0 ? -8 : 0 }]}
-                />
-              ))}
-              <View style={styles.likeExtraWrap}>
-                <Text style={styles.likeExtra}>+{post.likes > 5 ? post.likes - 5 : 0}</Text>
+              {/* Post preview card */}
+              <View style={styles.postPreview}>
+                <View style={styles.postPreviewHeader}>
+                  <Avatar uri={post.authorAvatar} name={post.authorName} size={40} />
+                  <View style={styles.postPreviewInfo}>
+                    <Text style={styles.postPreviewName}>{post.authorName}</Text>
+                    <Text style={styles.postPreviewTime}>{formatRelativeTime(post.createdAt)}</Text>
+                  </View>
+                </View>
+                {post.content ? (
+                  <Text style={styles.postPreviewText}>{post.content}</Text>
+                ) : null}
               </View>
-            </View>
-          </View>
 
-          {/* Comments header */}
-          <View style={styles.commentsHeader}>
-            <Text style={styles.sectionLabel}>Comments</Text>
-            <TouchableOpacity style={styles.sortBtn}>
-              <Text style={styles.sortText}>Most Recent</Text>
-              <Ionicons name="swap-vertical-outline" size={16} color={Colors.text.secondary} />
-            </TouchableOpacity>
-          </View>
+              {/* Like section */}
+              <View style={styles.likeSection}>
+                <TouchableOpacity style={styles.likeBtn} onPress={handleLike} activeOpacity={0.7}>
+                  <Ionicons
+                    name={liked ? 'heart' : 'heart-outline'}
+                    size={22}
+                    color={liked ? Colors.like : Colors.text.secondary}
+                  />
+                  <Text style={[styles.likeBtnText, liked && { color: Colors.like }]}>
+                    {likesCount} {likesCount === 1 ? 'Like' : 'Likes'}
+                  </Text>
+                </TouchableOpacity>
+                <View style={styles.likeStat}>
+                  <Ionicons name="chatbubble-outline" size={18} color={Colors.text.secondary} />
+                  <Text style={styles.likeStatText}>{comments.length} Comments</Text>
+                </View>
+              </View>
 
-          {/* Comment list */}
-          <View style={styles.commentsList}>
-            {comments.map(c => (
-              <CommentItem key={c.id} comment={c} />
-            ))}
-            {comments.length === 0 && <Text style={styles.sortText}>No comments yet.</Text>}
-          </View>
+              {/* Comments header */}
+              <View style={styles.commentsHeader}>
+                <Text style={styles.sectionLabel}>Comments</Text>
+              </View>
 
-          <View style={{ height: 80 }} />
+              {/* Comment list */}
+              <View style={styles.commentsList}>
+                {comments.map(c => (
+                  <CommentItem key={c.id} comment={c} />
+                ))}
+                {comments.length === 0 && (
+                  <View style={styles.emptyComments}>
+                    <Ionicons name="chatbubble-outline" size={32} color={Colors.text.muted} />
+                    <Text style={styles.mutedText}>No comments yet. Be the first!</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={{ height: 80 }} />
             </>
           )}
         </ScrollView>
 
-        {/* Comment input */}
+        {/* Comment input — clean: just text input + send */}
         <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, Spacing.sm) }]}>
-          <TouchableOpacity style={styles.inputBarAction}>
-            <Ionicons name="attach-outline" size={22} color={Colors.text.secondary} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.inputBarAction}>
-            <Ionicons name="happy-outline" size={22} color={Colors.text.secondary} />
-          </TouchableOpacity>
           <TextInput
             style={styles.commentInput}
             placeholder="Write a comment..."
@@ -196,15 +223,19 @@ export default function PostDetailScreen() {
             multiline
           />
           <TouchableOpacity
-            style={[styles.sendBtn, commentText && styles.sendBtnActive]}
-            disabled={!commentText || submittingComment}
+            style={[styles.sendBtn, commentText.trim() && styles.sendBtnActive]}
+            disabled={!commentText.trim() || submittingComment}
             onPress={handleSubmitComment}
           >
-            <Ionicons
-              name="paper-plane"
-              size={20}
-              color={commentText ? Colors.primary : Colors.text.muted}
-            />
+            {submittingComment ? (
+              <ActivityIndicator size={16} color={Colors.primary} />
+            ) : (
+              <Ionicons
+                name="paper-plane"
+                size={20}
+                color={commentText.trim() ? Colors.primary : Colors.text.muted}
+              />
+            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -221,37 +252,83 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, color: Colors.text.primary },
-  likesSection: { padding: Spacing.base, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  sectionLabel: { fontSize: FontSize.base, fontWeight: FontWeight.semibold, color: Colors.text.primary, marginBottom: Spacing.sm },
-  likeAvatars: { flexDirection: 'row', alignItems: 'center' },
-  likeAvatar: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: Colors.background },
-  likeExtraWrap: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: Colors.primaryLight, alignItems: 'center', justifyContent: 'center',
-    marginLeft: -8, borderWidth: 2, borderColor: Colors.background,
+
+  // Post preview
+  postPreview: {
+    padding: Spacing.base,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
-  likeExtra: { fontSize: FontSize.xs, color: Colors.primary, fontWeight: FontWeight.bold },
+  postPreviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  postPreviewInfo: { marginLeft: Spacing.sm },
+  postPreviewName: { fontSize: FontSize.base, fontWeight: FontWeight.semibold, color: Colors.text.primary },
+  postPreviewTime: { fontSize: FontSize.xs, color: Colors.text.muted, marginTop: 1 },
+  postPreviewText: {
+    fontSize: FontSize.base,
+    color: Colors.text.primary,
+    lineHeight: 22,
+    marginTop: Spacing.xs,
+  },
+
+  // Like section
+  likeSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.base,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  likeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+  },
+  likeBtnText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: Colors.text.secondary,
+  },
+  likeStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  likeStatText: {
+    fontSize: FontSize.sm,
+    color: Colors.text.secondary,
+  },
+
+  // Comments
+  sectionLabel: { fontSize: FontSize.base, fontWeight: FontWeight.semibold, color: Colors.text.primary },
   commentsHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     padding: Spacing.base, borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
-  sortBtn: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
-  sortText: { fontSize: FontSize.sm, color: Colors.text.secondary },
   commentsList: { padding: Spacing.base, gap: Spacing.base },
   commentWrap: { flexDirection: 'row', gap: Spacing.sm },
   commentBody: { flex: 1 },
+  commentHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: 2 },
   commentName: { fontSize: FontSize.base, fontWeight: FontWeight.semibold, color: Colors.text.primary },
-  commentTime: { fontSize: FontSize.xs, color: Colors.text.muted, marginBottom: Spacing.xs },
-  commentText: { fontSize: FontSize.base, color: Colors.text.primary, lineHeight: 21, marginBottom: Spacing.xs },
-  commentActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, flexWrap: 'wrap' },
-  commentAction: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  commentActionText: { fontSize: FontSize.xs, color: Colors.text.secondary, fontWeight: FontWeight.medium },
+  commentTime: { fontSize: FontSize.xs, color: Colors.text.muted },
+  commentText: { fontSize: FontSize.base, color: Colors.text.primary, lineHeight: 21 },
+  emptyComments: { alignItems: 'center', paddingVertical: Spacing.xl, gap: Spacing.sm },
+  mutedText: { fontSize: FontSize.sm, color: Colors.text.muted },
+
+  // Input bar
   inputBar: {
     flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.border,
-    backgroundColor: Colors.background, gap: Spacing.xs,
+    backgroundColor: Colors.background, gap: Spacing.sm,
   },
-  inputBarAction: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   commentInput: {
     flex: 1, minHeight: 38, maxHeight: 100,
     backgroundColor: Colors.surface, borderRadius: BorderRadius.full,
@@ -259,7 +336,7 @@ const styles = StyleSheet.create({
     fontSize: FontSize.base, color: Colors.text.primary,
     borderWidth: 1, borderColor: Colors.border,
   },
-  sendBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  sendBtnActive: {},
+  sendBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20 },
+  sendBtnActive: { backgroundColor: Colors.primaryLight },
   loadingWrap: { alignItems: 'center', padding: Spacing.lg },
 });

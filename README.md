@@ -139,7 +139,8 @@ Here is a complete look at the Social-Mate Mobile App interface, demonstrating e
       <img src="appScreens/profile settings.jpeg" width="250" />
     </td>
     <td align="center">
-      <!-- Empty space for symmetry -->
+      <b>Story Section</b><br>
+      <img src="appScreens/story screen.jpeg" width="250" />
     </td>
   </tr>
 </table>

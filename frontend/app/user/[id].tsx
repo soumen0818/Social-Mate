@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Avatar from '@/components/ui/Avatar';
 import { Colors } from '@/constants/Colors';
 import { BorderRadius, FontSize, FontWeight, Shadow, Spacing } from '@/constants/AppTheme';
-import { fetchUserProfile, fetchUserPosts, toggleFollow } from '@/lib/socialApi';
+import { fetchUserProfile, fetchUserPosts, toggleFollow, mapPost } from '@/lib/socialApi';
 import PostCard from '@/components/home/PostCard';
 import type { FeedPost } from '@/types/social';
 
@@ -31,22 +31,7 @@ export default function UserProfileScreen() {
         ]);
         setProfile(prof);
         setIsFollowing(!!prof.is_following);
-        
-        // Map backend posts to frontend
-        const mappedPosts = userPosts.map((p: any) => ({
-          id: p.id,
-          authorId: p.author_id,
-          authorName: p.author_display_name || p.author_username,
-          authorAvatar: p.author_avatar_url || '',
-          content: p.caption,
-          likes: p.likes_count,
-          comments: p.comments_count,
-          shares: p.shares_count,
-          createdAt: p.created_at,
-          imageUrl: p.images?.[0]?.image_url,
-          isLiked: false, 
-        }));
-        setPosts(mappedPosts);
+        setPosts(userPosts.map(mapPost));
       } catch (err) {
         console.error(err);
       } finally {

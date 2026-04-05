@@ -10,7 +10,7 @@ import Avatar from '@/components/ui/Avatar';
 import { Colors } from '@/constants/Colors';
 import { BorderRadius, FontSize, FontWeight, Shadow, Spacing } from '@/constants/AppTheme';
 import type { FeedPost } from '@/types/social';
-import { togglePostBookmark, deletePost, getSignedImageUrl } from '@/lib/socialApi';
+import { togglePostBookmark, deletePost, getSignedImageUrl, togglePostLike } from '@/lib/socialApi';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -159,22 +159,27 @@ export default function PostCard({ post, onLike, onShare, onBookmark }: PostCard
   }, [post.id, post.isLiked, post.likes, post.shares]);
 
   async function handleLike() {
-    const optimisticLiked = !liked;
-    const optimisticLikes = liked ? likes - 1 : likes + 1;
-    setLiked(optimisticLiked);
-    setLikes(optimisticLikes);
-
-    if (!onLike) return;
+    const prevLiked = liked;
+    const prevLikes = likes;
+    setLiked(!liked);
+    setLikes(liked ? likes - 1 : likes + 1);
 
     try {
-      const result = await onLike(post.id);
-      if (result) {
-        setLiked(result.isLiked);
-        setLikes(result.likesCount);
+      if (onLike) {
+        const result = await onLike(post.id);
+        if (result) {
+          setLiked(result.isLiked);
+          setLikes(result.likesCount);
+        }
+      } else {
+        // Fallback: call API directly when no onLike prop
+        const result = await togglePostLike(post.id);
+        setLiked(result.is_liked);
+        setLikes(result.likes_count);
       }
     } catch {
-      setLiked(liked);
-      setLikes(likes);
+      setLiked(prevLiked);
+      setLikes(prevLikes);
     }
   }
 
