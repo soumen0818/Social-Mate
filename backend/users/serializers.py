@@ -9,6 +9,12 @@ class UserMeSerializer(serializers.ModelSerializer):
     posts_count = serializers.SerializerMethodField()
     photos_count = serializers.SerializerMethodField()
     website = serializers.URLField(allow_blank=True, allow_null=True, required=False)
+
+    def validate_website(self, value):
+        """Auto-prepend https:// if the user omits the scheme (e.g. 'google.com')."""
+        if value and not value.startswith(('http://', 'https://')):
+            value = 'https://' + value
+        return value or None
     is_following = serializers.SerializerMethodField()
 
     class Meta:

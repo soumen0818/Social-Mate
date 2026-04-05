@@ -49,7 +49,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Check initial session & onboarding
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.warn('Silent auth check error:', error.message);
+      }
       setSession(session);
       if (session) {
         syncProfile(session.user, session.access_token);
@@ -89,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: supabaseUser.email,
       name: supabaseUser.user_metadata?.name || '',
       username: supabaseUser.email.split('@')[0],
-      avatar: 'https://i.pravatar.cc/150?img=49',
+      avatar: '',
       bio: '',
       gender: '',
       website: '',

@@ -18,8 +18,9 @@ export default function Avatar({ uri, name, size = 40, showOnline = false, style
     <View style={[{ width: size, height: size }, style]}>
       {uri ? (
         <Image
-          source={{ uri }}
+          source={{ uri, cache: 'reload' }}
           style={{ width: size, height: size, borderRadius: radius }}
+          key={uri}
         />
       ) : (
         <View style={[styles.placeholder, { width: size, height: size, borderRadius: radius }]}>

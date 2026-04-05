@@ -10,18 +10,18 @@ import { BorderRadius, FontSize, FontWeight, Spacing } from '@/constants/AppThem
 import Avatar from '@/components/ui/Avatar';
 import { supabase } from '@/lib/supabase';
 import { API_BASE_URL } from '@/lib/api';
-import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 
 function EditProfileScreen() {
   const router = useRouter();
   const { user, syncProfile } = useAuth() as any;
-  
+
   const [name, setName] = useState(user?.name || '');
   const [bio, setBio] = useState(user?.bio || '');
   const [gender, setGender] = useState(user?.gender || '');
   const [website, setWebsite] = useState(user?.website || '');
   const [avatarUri, setAvatarUri] = useState<string | null>(user?.avatar || null);
+  const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const handlePickImage = async () => {
@@ -30,32 +30,32 @@ function EditProfileScreen() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
+      base64: true,
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
       setAvatarUri(result.assets[0].uri);
+      setAvatarBase64(result.assets[0].base64 || null);
     }
   };
 
-  const uploadAvatarToSupabase = async (uri: string): Promise<string | null> => {
+  const uploadAvatarToSupabase = async (uri: string, base64Str: string): Promise<string | null> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) throw new Error('No session');
 
       const fileName = `avatar_${Date.now()}.jpg`;
       const filePath = `${session.user.id}/${fileName}`;
-      
-      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-      
+
       const { error } = await supabase.storage
         .from('posts_media')
-        .upload(filePath, decode(base64), { 
+        .upload(filePath, decode(base64Str), {
           contentType: 'image/jpeg',
           upsert: true
         });
 
       if (error) throw error;
-      
+
       const { data: publicUrlData } = supabase.storage.from('posts_media').getPublicUrl(filePath);
       return publicUrlData.publicUrl;
     } catch (e) {
@@ -73,11 +73,17 @@ function EditProfileScreen() {
 
       // Check if avatar has changed locally
       let finalAvatarUrl = user.avatar;
-      if (avatarUri && avatarUri !== user.avatar && !avatarUri.startsWith('http')) {
-         const newUrl = await uploadAvatarToSupabase(avatarUri);
+      if (avatarUri && avatarBase64 && avatarUri !== user.avatar && !avatarUri.startsWith('http')) {
+         const newUrl = await uploadAvatarToSupabase(avatarUri, avatarBase64);
          if (newUrl) {
             finalAvatarUrl = newUrl;
          }
+      }
+
+      // Sanitize website URL – prepend https:// if user typed a bare domain
+      let sanitizedWebsite = website.trim();
+      if (sanitizedWebsite && !sanitizedWebsite.startsWith('http://') && !sanitizedWebsite.startsWith('https://')) {
+        sanitizedWebsite = 'https://' + sanitizedWebsite;
       }
 
       // Update via Django Backend
@@ -92,14 +98,14 @@ function EditProfileScreen() {
           bio,
           gender,
           avatar_url: finalAvatarUrl,
-          website: website ? website : null,
+          website: sanitizedWebsite || null,
         }),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Update profile error:', errorText);
-        throw new Error(`Failed to update profile. Make sure the website is a valid URL (e.g., https://example.com).`);
+        throw new Error("Failed to update profile. Make sure the website is a valid URL (e.g., https://example.com).");
       }
 
       await syncProfile(session.user, session.access_token);
@@ -133,7 +139,7 @@ function EditProfileScreen() {
       <ScrollView style={styles.body} contentContainerStyle={styles.content}>
         <View style={styles.avatarWrap}>
           <View style={styles.avatarBorder}>
-            <Avatar uri={avatarUri || undefined} name={name} size={100} />    
+            <Avatar uri={avatarUri || undefined} name={name} size={100} />
             <TouchableOpacity style={styles.avatarEditBtn} onPress={handlePickImage} disabled={saving}>
               <Ionicons name="camera" size={18} color="#FFFFFF" />
             </TouchableOpacity>
@@ -159,28 +165,34 @@ function EditProfileScreen() {
             placeholder="Ui/UX Designer at Google..."
             multiline
             numberOfLines={3}
+            textAlignVertical="top"
           />
         </View>
 
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Gender</Text>
-          <TextInput
-            style={styles.input}
-            value={gender}
-            onChangeText={setGender}
-            placeholder="Male, Female, Custom"
-          />
+          <View style={styles.genderRow}>
+            {['Male', 'Female', 'Other'].map(g => (
+              <TouchableOpacity
+                key={g}
+                style={[styles.genderChip, gender === g && styles.genderChipActive]}
+                onPress={() => setGender(g)}
+              >
+                <Text style={[styles.genderText, gender === g && styles.genderTextActive]}>{g}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Website</Text>
+          <Text style={styles.label}>Website (Optional)</Text>
           <TextInput
             style={styles.input}
             value={website}
             onChangeText={setWebsite}
-            placeholder="https://example.com"
-            keyboardType="url"
+            placeholder="https://yourwebsite.com"
             autoCapitalize="none"
+            keyboardType="url"
           />
         </View>
       </ScrollView>
@@ -189,72 +201,114 @@ function EditProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#FFFFFF' },
+  safe: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.base,
+    paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  headerIconBtn: { padding: Spacing.xs },
+  headerIconBtn: {
+    padding: Spacing.sm,
+  },
   headerTitle: {
     fontSize: FontSize.lg,
     fontWeight: FontWeight.bold,
     color: Colors.text.primary,
   },
-  saveBtn: { padding: Spacing.xs, minWidth: 50, alignItems: 'flex-end' },
-  saveText: {
-    color: Colors.primary,
-    fontWeight: FontWeight.bold,
-    fontSize: FontSize.md,
+  saveBtn: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
   },
-  body: { flex: 1 },
-  content: { padding: Spacing.xl },
-  avatarWrap: { alignItems: 'center', marginBottom: Spacing.xxl },
+  saveText: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.semibold,
+    color: Colors.primary,
+  },
+  body: {
+    flex: 1,
+  },
+  content: {
+    padding: Spacing.xl,
+  },
+  avatarWrap: {
+    alignItems: 'center',
+    marginBottom: Spacing.xxl,
+  },
   avatarBorder: {
-    width: 108,
-    height: 108,
-    borderRadius: 54,
+    padding: 4,
+    borderRadius: 60,
     borderWidth: 2,
     borderColor: Colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderStyle: 'dashed',
     position: 'relative',
   },
   avatarEditBtn: {
     position: 'absolute',
     bottom: 0,
-    right: -4,
+    right: 0,
     backgroundColor: Colors.primary,
     width: 32,
     height: 32,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
+    borderWidth: 3,
+    borderColor: Colors.background,
   },
-  inputGroup: { marginBottom: Spacing.lg },
+  inputGroup: {
+    marginBottom: Spacing.xl,
+  },
   label: {
     fontSize: FontSize.sm,
+    fontWeight: FontWeight.medium,
     color: Colors.text.secondary,
     marginBottom: Spacing.sm,
-    fontWeight: FontWeight.medium,
   },
   input: {
+    backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
     borderRadius: BorderRadius.md,
-    paddingHorizontal: Spacing.base,
-    paddingVertical: Spacing.sm,
-    fontSize: FontSize.base,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    fontSize: FontSize.md,
     color: Colors.text.primary,
-    backgroundColor: Colors.background,
   },
-  textArea: { minHeight: 80, textAlignVertical: 'top' },
+  textArea: {
+    minHeight: 100,
+  },
+  genderRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  genderChip: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.surface,
+  },
+  genderChipActive: {
+    backgroundColor: Colors.primaryLight,
+    borderColor: Colors.primary,
+  },
+  genderText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.medium,
+    color: Colors.text.secondary,
+  },
+  genderTextActive: {
+    color: Colors.primary,
+  },
 });
 
 export default EditProfileScreen;

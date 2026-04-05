@@ -39,15 +39,12 @@ function SettingsScreen() {
 
   const MENU_ITEMS: MenuItem[] = [
     { icon: 'pencil-outline', label: 'Edit Profile', route: '/edit-profile' },
-    { icon: 'people-outline', label: 'Network' },
-    { icon: 'images-outline', label: 'Photos' },
     { icon: 'bookmark-outline', label: 'Bookmarks', route: '/bookmarks' },
     { icon: 'people-circle-outline', label: 'Group', route: '/(tabs)/groups' },
     { icon: 'lock-closed-outline', label: 'Your Privacy' },
-    { icon: 'search-outline', label: 'Search Profile', route: '/(tabs)/search' },
-    { icon: 'settings-outline', label: 'Settings' },
     { icon: 'information-circle-outline', label: 'About Us' },
     { icon: 'language-outline', label: 'Language' },
+    { icon: 'log-out-outline', label: 'Log Out', action: handleLogout },
   ];
 
   return (
@@ -78,24 +75,32 @@ function SettingsScreen() {
           {MENU_ITEMS.map((item, index) => (
             <TouchableOpacity
               key={index}
-              style={styles.menuItem}
+              style={[
+                styles.menuItem,
+                item.label === 'Log Out' && styles.menuItemLogout,
+              ]}
               onPress={() => handleNavigation(item.route, item.action)}
             >
               <View style={styles.menuIconWrap}>
-                <Ionicons name={item.icon} size={22} color={Colors.primary} />
+                <Ionicons
+                  name={item.icon}
+                  size={22}
+                  color={item.label === 'Log Out' ? '#E53935' : Colors.primary}
+                />
               </View>
-              <Text style={styles.menuLabel}>{item.label}</Text>
-              <Ionicons name="chevron-forward" size={20} color={Colors.text.secondary} />
+              <Text
+                style={[
+                  styles.menuLabel,
+                  item.label === 'Log Out' && styles.menuLabelLogout,
+                ]}
+              >
+                {item.label}
+              </Text>
+              {item.label !== 'Log Out' && (
+                <Ionicons name="chevron-forward" size={20} color={Colors.text.secondary} />
+              )}
             </TouchableOpacity>
           ))}
-          
-          {/* Logout separately placed closer to the bottom layout styling */}
-          <TouchableOpacity style={[styles.menuItem, { marginTop: Spacing.xl }]} onPress={handleLogout}>
-            <View style={styles.menuIconWrap}>
-              <Ionicons name="log-out-outline" size={22} color={Colors.primary} />
-            </View>
-            <Text style={styles.menuLabel}>Log Out</Text>
-          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -180,6 +185,15 @@ const styles = StyleSheet.create({
     fontSize: FontSize.base,
     color: '#333333',
     fontWeight: FontWeight.medium,
+  },
+  menuItemLogout: {
+    marginTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+    paddingTop: Spacing.base,
+  },
+  menuLabelLogout: {
+    color: '#E53935',
   },
 });
 

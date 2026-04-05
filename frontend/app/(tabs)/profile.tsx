@@ -71,7 +71,7 @@ export default function ProfileScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>{user?.name ?? 'Profile'}</Text>
+        <Text style={styles.headerTitle}>Profile</Text>
         <TouchableOpacity style={styles.settingsBtn} onPress={() => router.push('/settings')}>
           <Ionicons name="settings-outline" size={24} color={Colors.text.primary} />
         </TouchableOpacity>
@@ -82,9 +82,6 @@ export default function ProfileScreen() {
         <View style={styles.avatarWrap}>
           <View style={styles.avatarBorder}>
             <Avatar uri={user?.avatar} name={user?.name} size={96} />
-            <TouchableOpacity style={styles.avatarEditBtn}>
-              <Ionicons name="pencil" size={16} color="#FFFFFF" />
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -190,19 +187,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     alignItems: 'center', justifyContent: 'center',
     position: 'relative',
-  },
-  avatarEditBtn: {
-    position: 'absolute',
-    bottom: 0,
-    right: -4,
-    backgroundColor: Colors.primary,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Colors.background,
   },
   nameSection: { alignItems: 'center', marginTop: Spacing.sm, paddingHorizontal: Spacing.base },
   name: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.text.primary },
