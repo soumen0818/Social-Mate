@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, ScrollView, StyleSheet, TouchableOpacity, Text, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,26 +8,54 @@ import CreatePostBar from '@/components/home/CreatePostBar';
 import StoryBar from '@/components/home/StoryBar';
 import PostCard from '@/components/home/PostCard';
 import { useAuth } from '@/context/AuthContext';
-import { buildStoriesFromPosts, fetchPosts, sharePost, togglePostLike } from '@/lib/socialApi';
+import { fetchPosts, fetchStories, sharePost, togglePostLike } from '@/lib/socialApi';
 import { Colors } from '@/constants/Colors';
 import { FontSize, Spacing } from '@/constants/AppTheme';
-import type { FeedPost } from '@/types/social';
+import type { FeedPost, StoryItem } from '@/types/social';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [stories, setStories] = useState<StoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  const stories = useMemo(
-    () => buildStoriesFromPosts(posts, user?.name, user?.avatar),
-    [posts, user?.name, user?.avatar],
-  );
 
   useEffect(() => {
     loadFeed();
   }, []);
+
+  const loadStories = useCallback(async () => {
+    try {
+      const raw = await fetchStories();
+      // Map backend story format to StoryItem, put current user first
+      const mapped: StoryItem[] = raw.map((s: any) => ({
+        id: s.id,
+        user: s.user_username || 'User',
+        avatar: s.user_avatar_url || '',
+        hasStory: true,
+      }));
+
+      // Always prepend the current user's "Your Story" slot
+      const ownStory: StoryItem = {
+        id: 'own-story',
+        user: user?.name || 'You',
+        avatar: user?.avatar || '',
+        hasStory: false,
+        isOwn: true,
+      };
+      setStories([ownStory, ...mapped]);
+    } catch {
+      // Even on failure, keep the user's own story slot
+      setStories([{
+        id: 'own-story',
+        user: user?.name || 'You',
+        avatar: user?.avatar || '',
+        hasStory: false,
+        isOwn: true,
+      }]);
+    }
+  }, [user?.name, user?.avatar]);
 
   async function loadFeed() {
     try {
@@ -40,9 +68,13 @@ export default function HomeScreen() {
     }
   }
 
+  useEffect(() => {
+    loadStories();
+  }, [loadStories]);
+
   async function onRefresh() {
     setRefreshing(true);
-    await loadFeed();
+    await Promise.all([loadFeed(), loadStories()]);
     setRefreshing(false);
   }
 

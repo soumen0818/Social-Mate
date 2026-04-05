@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  ScrollView, KeyboardAvoidingView, Platform, Alert, Image,
+  ScrollView, KeyboardAvoidingView, Platform, Alert, Image, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,17 +9,19 @@ import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import Avatar from '@/components/ui/Avatar';
 import { useAuth } from '@/context/AuthContext';
-import { createPost } from '@/lib/socialApi';
 import { Colors } from '@/constants/Colors';
 import { BorderRadius, FontSize, FontWeight, Spacing } from '@/constants/AppTheme';
+import { supabase } from '@/lib/supabase';
+import { API_BASE_URL } from '@/lib/api';
+import { decode } from 'base64-arraybuffer';
 
 const MAX_IMAGES = 2;
-const MAX_IMAGE_SIZE_BYTES = 1024 * 1024;
 
 type PickedImage = {
   uri: string;
   fileName?: string | null;
   fileSize?: number;
+  base64?: string | null;
 };
 
 export default function CreatePostScreen() {
@@ -45,61 +47,131 @@ export default function CreatePostScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
-      quality: 0.9,
+      quality: 0.85,
+      base64: true,
       selectionLimit: MAX_IMAGES - images.length,
     });
 
-    if (result.canceled) {
-      return;
-    }
+    if (result.canceled) return;
 
-    const newImages = result.assets.map((asset) => ({
+    const newImages: PickedImage[] = result.assets.map((asset) => ({
       uri: asset.uri,
-      fileName: asset.fileName,
+      fileName: asset.fileName || `image_${Date.now()}.jpg`,
       fileSize: asset.fileSize,
+      base64: asset.base64,
     }));
-
-    const tooLarge = newImages.find((image) => (image.fileSize ?? 0) > MAX_IMAGE_SIZE_BYTES);
-    if (tooLarge) {
-      Alert.alert('File too large', 'Each image must be 1MB or less.');
-      return;
-    }
-
-    if (newImages.some((image) => image.fileSize == null)) {
-      Alert.alert('File size unavailable', 'Please pick a different image under 1MB.');
-      return;
-    }
 
     setImages((prev) => [...prev, ...newImages].slice(0, MAX_IMAGES));
   }
 
   function handleRemoveImage(uri: string) {
-    setImages((prev) => prev.filter((image) => image.uri !== uri));
+    setImages((prev) => prev.filter((img) => img.uri !== uri));
   }
 
   function handleClose() {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/');
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  }
+
+  /** Upload images to Supabase Storage via the backend intent flow, returns storage paths */
+  async function uploadImagesToSupabase(accessToken: string): Promise<string[]> {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) throw new Error('No session');
+
+    const uploadedPaths: string[] = [];
+
+    for (const img of images) {
+      if (!img.base64) continue;
+
+      const ext = (img.fileName || 'photo.jpg').split('.').pop()?.toLowerCase() || 'jpg';
+      const contentType = `image/${ext === 'png' ? 'png' : 'jpeg'}`;
+
+      // Step 1: Register upload intent with backend to get a valid storage_path
+      const intentRes = await fetch(`${API_BASE_URL}/api/posts/upload-urls/`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          files: [{
+            file_name: img.fileName || `photo.${ext}`,
+            content_type: contentType,
+            size_bytes: img.fileSize || Math.ceil(img.base64.length * 0.75),
+          }],
+        }),
+      });
+
+      if (!intentRes.ok) {
+        const err = await intentRes.text();
+        console.warn('Intent registration failed:', err);
+        continue;
+      }
+
+      const intentData = await intentRes.json();
+      const upload = intentData.uploads?.[0];
+      if (!upload?.storage_path) continue;
+
+      // Step 2: Upload binary directly to Supabase Storage
+      const { error: storageError } = await supabase.storage
+        .from('posts_media')
+        .upload(upload.storage_path, decode(img.base64), {
+          contentType,
+          upsert: false,
+        });
+
+      if (storageError) {
+        console.warn('Storage upload failed:', storageError.message);
+        continue;
+      }
+
+      uploadedPaths.push(upload.storage_path);
     }
+
+    return uploadedPaths;
   }
 
   async function handlePost() {
-    if (!content.trim() || isSubmitting) {
-      return;
-    }
+    if (!content.trim() || isSubmitting) return;
 
+    setIsSubmitting(true);
     try {
-      setIsSubmitting(true);
-      await createPost(content.trim());
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace('/');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not logged in');
+
+      const accessToken = session.access_token;
+
+      // Upload images first if any were selected
+      let uploadedPaths: string[] = [];
+      if (images.length > 0) {
+        uploadedPaths = await uploadImagesToSupabase(accessToken);
+        if (uploadedPaths.length === 0) {
+          Alert.alert('Photo Upload Failed', 'Could not upload images. The post will be created with text only.');
+        }
       }
-    } catch (e) {
-      console.error(e);
+
+      // Create the post with caption + image storage paths
+      const res = await fetch(`${API_BASE_URL}/api/posts/`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          caption: content.trim(),
+          uploaded_paths: uploadedPaths,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err || 'Failed to create post');
+      }
+
+      if (router.canGoBack()) router.back();
+      else router.replace('/');
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Could not create post');
     } finally {
       setIsSubmitting(false);
     }
@@ -116,33 +188,34 @@ export default function CreatePostScreen() {
           <Text style={styles.headerTitle}>Create a Post</Text>
           <TouchableOpacity
             onPress={handlePost}
-            style={[styles.postBtn, (!content || isSubmitting) && styles.postBtnDisabled]}
-            disabled={!content || isSubmitting}
+            style={[styles.postBtn, (!content.trim() || isSubmitting) && styles.postBtnDisabled]}
+            disabled={!content.trim() || isSubmitting}
           >
-            <Text style={[styles.postBtnText, (!content || isSubmitting) && styles.postBtnTextDisabled]}>
-              {isSubmitting ? 'Posting...' : 'Post'}
-            </Text>
+            {isSubmitting ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={[styles.postBtnText, !content.trim() && styles.postBtnTextDisabled]}>Post</Text>
+            )}
           </TouchableOpacity>
         </View>
 
         <ScrollView style={styles.body} keyboardShouldPersistTaps="handled">
-          {/* User info */}
+          {/* User info row */}
           <View style={styles.userRow}>
             <Avatar uri={user?.avatar} name={user?.name} size={44} />
             <View style={styles.userInfo}>
               <Text style={styles.userName}>{user?.name ?? 'User'}</Text>
-              <TouchableOpacity style={styles.audienceBtn}>
+              <View style={styles.audienceChip}>
                 <Ionicons name="earth-outline" size={12} color={Colors.primary} />
                 <Text style={styles.audienceText}>{audience}</Text>
-                <Ionicons name="chevron-down" size={12} color={Colors.primary} />
-              </TouchableOpacity>
+              </View>
             </View>
           </View>
 
           {/* Text input */}
           <TextInput
             style={styles.input}
-            placeholder="What's on your head?"
+            placeholder="What's on your mind?"
             placeholderTextColor={Colors.text.muted}
             multiline
             value={content}
@@ -151,37 +224,43 @@ export default function CreatePostScreen() {
             textAlignVertical="top"
           />
 
-          {/* Drag handle */}
-          <View style={styles.handle} />
+          {/* Image previews */}
+          {images.length > 0 && (
+            <View style={styles.previewGrid}>
+              {images.map((image) => (
+                <View key={image.uri} style={styles.previewItem}>
+                  <Image source={{ uri: image.uri }} style={styles.previewImage} resizeMode="cover" />
+                  <TouchableOpacity
+                    onPress={() => handleRemoveImage(image.uri)}
+                    style={styles.removeBtn}
+                  >
+                    <Ionicons name="close" size={14} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
 
-          <View style={styles.options}>
-            <TouchableOpacity style={styles.option} activeOpacity={0.8} onPress={handlePickImages}>
-              <View style={[styles.optionIcon, { backgroundColor: '#1D7FE818' }]}>
-                <Ionicons name="image-outline" size={20} color="#1D7FE8" />
-              </View>
-              <View style={styles.optionTextWrap}>
-                <Text style={styles.optionLabel}>Add Photos</Text>
-                <Text style={styles.optionHint}>Only images. Max 2 files, 1MB each.</Text>
-              </View>
-            </TouchableOpacity>
-
-            {images.length > 0 && (
-              <View style={styles.previewGrid}>
-                {images.map((image) => (
-                  <View key={image.uri} style={styles.previewItem}>
-                    <Image source={{ uri: image.uri }} style={styles.previewImage} />
-                    <TouchableOpacity
-                      onPress={() => handleRemoveImage(image.uri)}
-                      style={styles.removePreviewBtn}
-                    >
-                      <Ionicons name="close" size={14} color={Colors.text.white} />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
+          <View style={{ height: 80 }} />
         </ScrollView>
+
+        {/* Bottom toolbar */}
+        <View style={styles.toolbar}>
+          <TouchableOpacity
+            style={[styles.toolbarBtn, images.length >= MAX_IMAGES && styles.toolbarBtnDisabled]}
+            onPress={handlePickImages}
+            disabled={images.length >= MAX_IMAGES}
+          >
+            <Ionicons
+              name="image-outline"
+              size={22}
+              color={images.length >= MAX_IMAGES ? Colors.text.muted : Colors.primary}
+            />
+            <Text style={[styles.toolbarBtnText, images.length >= MAX_IMAGES && { color: Colors.text.muted }]}>
+              {images.length > 0 ? `Photos (${images.length}/${MAX_IMAGES})` : 'Add Photo'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -196,9 +275,16 @@ const styles = StyleSheet.create({
   },
   closeBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: FontSize.lg, fontWeight: FontWeight.semibold, color: Colors.text.primary },
-  postBtn: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs + 2 },
-  postBtnDisabled: {},
-  postBtnText: { fontSize: FontSize.base, fontWeight: FontWeight.bold, color: Colors.primary },
+  postBtn: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs + 2,
+    borderRadius: BorderRadius.full,
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  postBtnDisabled: { backgroundColor: Colors.border },
+  postBtnText: { fontSize: FontSize.base, fontWeight: FontWeight.bold, color: '#FFFFFF' },
   postBtnTextDisabled: { color: Colors.text.muted },
   body: { flex: 1 },
   userRow: {
@@ -207,7 +293,7 @@ const styles = StyleSheet.create({
   },
   userInfo: { gap: Spacing.xs },
   userName: { fontSize: FontSize.base, fontWeight: FontWeight.semibold, color: Colors.text.primary },
-  audienceBtn: {
+  audienceChip: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     borderWidth: 1, borderColor: Colors.primary,
     borderRadius: BorderRadius.full,
@@ -219,52 +305,38 @@ const styles = StyleSheet.create({
     minHeight: 120, paddingHorizontal: Spacing.base,
     fontSize: FontSize.md, color: Colors.text.primary, lineHeight: 24,
   },
-  handle: {
-    width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.border,
-    alignSelf: 'center', marginVertical: Spacing.base,
-  },
-  options: { paddingHorizontal: Spacing.base, paddingBottom: Spacing.xxl },
-  option: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1, borderBottomColor: '#F5F5F5',
-  },
-  optionTextWrap: { flex: 1 },
-  optionIcon: {
-    width: 40, height: 40, borderRadius: BorderRadius.sm,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  optionLabel: { fontSize: FontSize.md, color: Colors.text.primary, fontWeight: FontWeight.medium },
-  optionHint: {
-    marginTop: 2,
-    fontSize: FontSize.sm,
-    color: Colors.text.muted,
-  },
   previewGrid: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    marginTop: Spacing.md,
+    flexDirection: 'row', flexWrap: 'wrap',
+    gap: Spacing.sm, paddingHorizontal: Spacing.base,
+    marginTop: Spacing.sm,
   },
   previewItem: {
-    width: 92,
-    height: 92,
-    borderRadius: BorderRadius.sm,
+    width: 120, height: 120,
+    borderRadius: BorderRadius.md,
     overflow: 'hidden',
     position: 'relative',
   },
-  previewImage: {
-    width: '100%',
-    height: '100%',
-  },
-  removePreviewBtn: {
-    position: 'absolute',
-    right: 6,
-    top: 6,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  previewImage: { width: '100%', height: '100%' },
+  removeBtn: {
+    position: 'absolute', right: 6, top: 6,
+    width: 22, height: 22, borderRadius: 11,
     backgroundColor: 'rgba(0,0,0,0.65)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
+  toolbar: {
+    flexDirection: 'row',
+    paddingHorizontal: Spacing.base,
+    paddingVertical: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    backgroundColor: Colors.background,
+  },
+  toolbarBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.xs,
+    paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.surface,
+  },
+  toolbarBtnDisabled: { opacity: 0.5 },
+  toolbarBtnText: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: FontWeight.medium },
 });

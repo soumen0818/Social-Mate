@@ -9,6 +9,21 @@ import { BorderRadius, FontSize, FontWeight, Shadow, Spacing } from '@/constants
 import type { FeedPost } from '@/types/social';
 import { togglePostBookmark, deletePost } from '@/lib/socialApi';
 
+/** Renders a post image with onError fallback — hides itself if the URL is broken */
+function PostImage({ uri }: { uri: string }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [uri]);
+  if (failed) return null;
+  return (
+    <Image
+      source={{ uri }}
+      style={styles.postImage}
+      resizeMode="cover"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 interface PostCardProps {
   post: FeedPost;
   onLike?: (id: string) => Promise<{ isLiked: boolean; likesCount: number } | void>;
@@ -137,7 +152,7 @@ export default function PostCard({ post, onLike, onShare, onBookmark }: PostCard
 
       {/* Image */}
       {post.imageUrl && (
-        <Image source={{ uri: post.imageUrl }} style={styles.postImage} resizeMode="cover" />
+        <PostImage uri={post.imageUrl} />
       )}
 
       {/* Actions */}
