@@ -160,6 +160,18 @@ export async function createPostComment(postId: string, text: string) {
   };
 }
 
+export async function fetchUserProfile(userId: string) {
+  return apiRequest<any>(`/api/users/${userId}/`, {
+    method: 'GET',
+  });
+}
+
+export async function fetchUserPosts(userId: string) {
+  return apiRequest<BackendPost[]>(`/api/users/${userId}/posts/`, {
+    method: 'GET',
+  });
+}
+
 export async function fetchFollowers(userId: string) {
   return apiRequest<BackendFollow[]>(`/api/follows/${userId}/followers/`);
 }

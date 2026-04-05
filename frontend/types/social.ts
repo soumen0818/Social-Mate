@@ -29,6 +29,7 @@ export interface FollowUser {
   displayName: string;
   avatarUrl: string;
   isFollowing: boolean;
+  followersCount?: number;
 }
 
 export interface StoryItem {
