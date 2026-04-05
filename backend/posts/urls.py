@@ -1,6 +1,8 @@
 from django.urls import path
 
 from posts.views import (
+    StoryListCreateView,
+    BookmarkListCreateView,
     CommunityListView,
     CommunityPostListView,
     CommunityToggleJoinView,
@@ -27,4 +29,6 @@ urlpatterns = [
     path('communities/joined/', JoinedCommunityListView.as_view(), name='communities-joined-list'),
     path('communities/<uuid:community_id>/toggle-join/', CommunityToggleJoinView.as_view(), name='communities-toggle-join'),
     path('communities/<uuid:community_id>/posts/', CommunityPostListView.as_view(), name='communities-post-list'),
+    path('stories/', StoryListCreateView.as_view(), name='stories-list-create'),
+    path('bookmarks/', BookmarkListCreateView.as_view(), name='bookmarks-list-create'),
 ]

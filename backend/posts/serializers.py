@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.utils import timezone
 from rest_framework import serializers
-from posts.models import Comment, Community, CommunityMembership, Post, PostImage, PostUploadIntent, Share
+from posts.models import Comment, Community, CommunityMembership, Post, PostImage, PostUploadIntent, Share, Story, Bookmark
 
 MAX_POST_IMAGES = 2
 MAX_IMAGE_SIZE_BYTES = 1024 * 1024
@@ -211,3 +211,18 @@ class ShareCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Share
         fields = ['platform']
+class StorySerializer(serializers.ModelSerializer):
+    user_id = serializers.UUIDField(source='user.id', read_only=True)
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    user_avatar_url = serializers.CharField(source='user.avatar_url', read_only=True)
+
+    class Meta:
+        model = Story
+        fields = ['id', 'user_id', 'user_username', 'user_avatar_url', 'image_url', 'storage_path', 'text', 'created_at', 'expires_at']
+
+class BookmarkSerializer(serializers.ModelSerializer):
+    post = PostSerializer(read_only=True)
+    
+    class Meta:
+        model = Bookmark
+        fields = ['id', 'post', 'created_at']

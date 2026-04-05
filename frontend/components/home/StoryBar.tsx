@@ -1,5 +1,7 @@
 import React from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadStory } from '@/lib/socialApi';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
@@ -11,6 +13,31 @@ interface StoryBarProps {
 }
 
 export default function StoryBar({ stories }: StoryBarProps) {
+  const handleAddStory = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Please allow media library permission to add stories.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      try {
+        await uploadStory({
+          image_url: result.assets[0].uri, // Simulate upload mapping in backend via presigned or simply storing uri for demo
+          text: 'New Story',
+        });
+        Alert.alert('Success', 'Story uploaded successfully!');
+      } catch (e) {
+        Alert.alert('Error', 'Failed to upload story');
+      }
+    }
+  };
+
   return (
     <ScrollView
       horizontal
@@ -18,7 +45,12 @@ export default function StoryBar({ stories }: StoryBarProps) {
       contentContainerStyle={styles.container}
     >
       {stories.map((story) => (
-        <TouchableOpacity key={story.id} style={styles.storyItem} activeOpacity={0.8}>
+        <TouchableOpacity
+          key={story.id}
+          style={styles.storyItem}
+          activeOpacity={0.8}
+          onPress={story.isOwn ? handleAddStory : undefined}
+        >
           {story.isOwn ? (
             <View style={styles.addStoryCircle}>
               <Ionicons name="add" size={28} color={Colors.primary} />
@@ -35,7 +67,7 @@ export default function StoryBar({ stories }: StoryBarProps) {
               </View>
             </LinearGradient>
           )}
-          <Text style={styles.storyName} numberOfLines={1}>{story.user}</Text>
+          <Text style={styles.storyName} numberOfLines={1}>{story.isOwn ? 'Your Story' : story.user}</Text>  
         </TouchableOpacity>
       ))}
     </ScrollView>

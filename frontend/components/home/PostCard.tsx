@@ -2,10 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { Alert } from 'react-native';
+import { useAuth } from '@/context/AuthContext';
 import Avatar from '@/components/ui/Avatar';
 import { Colors } from '@/constants/Colors';
 import { BorderRadius, FontSize, FontWeight, Shadow, Spacing } from '@/constants/AppTheme';
 import type { FeedPost } from '@/types/social';
+import { togglePostBookmark, deletePost } from '@/lib/socialApi';
 
 interface PostCardProps {
   post: FeedPost;
@@ -21,10 +24,43 @@ function formatCount(n: number) {
 
 export default function PostCard({ post, onLike, onShare, onBookmark }: PostCardProps) {
   const router = useRouter();
+  const { user } = useAuth();
   const [liked, setLiked] = useState(post.isLiked);
   const [likes, setLikes] = useState(post.likes);
   const [bookmarked, setBookmarked] = useState(false);
   const [shares, setShares] = useState(post.shares);
+
+  const handleMoreOptions = () => {
+    if (user?.id === post.authorId) {
+      Alert.alert(
+        'Post Options',
+        '',
+        [
+          { text: 'Edit Post', onPress: () => router.push(`/post/edit/${post.id}`) },
+          { text: 'Delete Post', style: 'destructive', onPress: () => handleDelete() },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+    } else {
+      Alert.alert(
+        'Post Options',
+        '',
+        [
+          { text: 'Report', onPress: () => Alert.alert('Reported', 'Thank you for reporting this post.') },
+          { text: "Don't show me this post", onPress: () => Alert.alert('Hidden', 'We will show fewer posts like this.') },
+          { text: 'Block Account', style: 'destructive', onPress: () => Alert.alert('Blocked', 'You will no longer see posts from this account.') },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+    }
+  };
+
+  const handleDelete = () => {
+    Alert.alert('Delete Post', 'Are you sure you want to delete this post?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => { try { await deletePost(post.id); if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); } catch {} } }
+    ]);
+  };
 
   useEffect(() => {
     setLiked(post.isLiked);
@@ -71,9 +107,16 @@ export default function PostCard({ post, onLike, onShare, onBookmark }: PostCard
     }
   }
 
-  function handleBookmark() {
+  async function handleBookmark() {
+    const prev = bookmarked;
     setBookmarked(!bookmarked);
-    onBookmark?.(post.id);
+    try {
+      const res = await togglePostBookmark(post.id);
+      setBookmarked(res.bookmarked);
+      onBookmark?.(post.id);
+    } catch {
+      setBookmarked(prev);
+    }
   }
 
   return (
@@ -85,7 +128,7 @@ export default function PostCard({ post, onLike, onShare, onBookmark }: PostCard
           <Text style={styles.userName}>{post.authorName}</Text>
           <Text style={styles.time}>{new Date(post.createdAt).toLocaleString()}</Text>
         </View>
-        <TouchableOpacity style={styles.moreBtn}>
+        <TouchableOpacity style={styles.moreBtn} onPress={handleMoreOptions}>
           <Ionicons name="ellipsis-horizontal" size={20} color={Colors.text.secondary} />
         </TouchableOpacity>
       </View>

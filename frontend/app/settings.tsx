@@ -41,6 +41,7 @@ function SettingsScreen() {
     { icon: 'pencil-outline', label: 'Edit Profile', route: '/edit-profile' },
     { icon: 'people-outline', label: 'Network' },
     { icon: 'images-outline', label: 'Photos' },
+    { icon: 'bookmark-outline', label: 'Bookmarks', route: '/bookmarks' },
     { icon: 'people-circle-outline', label: 'Group', route: '/(tabs)/groups' },
     { icon: 'lock-closed-outline', label: 'Your Privacy' },
     { icon: 'search-outline', label: 'Search Profile', route: '/(tabs)/search' },

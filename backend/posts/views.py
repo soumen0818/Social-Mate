@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from notifications.models import Notification
-from posts.models import Comment, Community, CommunityMembership, Like, Post, PostUploadIntent, Share
+from posts.models import Comment, Community, CommunityMembership, Like, Post, PostUploadIntent, Share, Story, Bookmark
 from posts.serializers import (
     CommentSerializer,
     CommentCreateSerializer,
@@ -19,6 +19,8 @@ from posts.serializers import (
     PostUploadIntentCreateSerializer,
     PostSerializer,
     ShareCreateSerializer,
+    StorySerializer,
+    BookmarkSerializer,
     POST_UPLOAD_INTENT_TTL_MINUTES,
 )
 
@@ -47,7 +49,7 @@ class PostListCreateView(generics.ListCreateAPIView):
         return Response(response_serializer.data, status=201)
 
 
-class PostDetailView(generics.RetrieveAPIView):
+class PostDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = PostSerializer
     queryset = Post.objects.select_related('author', 'community').prefetch_related('images', 'likes', 'comments', 'shares')
@@ -239,3 +241,32 @@ class CommunityPostListView(generics.ListAPIView):
             .prefetch_related('images', 'likes', 'comments', 'shares')
             .filter(community_id=community_id)
         )
+class StoryListCreateView(generics.ListCreateAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = StorySerializer
+
+    def get_queryset(self):
+        return Story.objects.filter(expires_at__gt=timezone.now()).select_related('user')
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+class BookmarkListCreateView(generics.ListCreateAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = BookmarkSerializer
+
+    def get_queryset(self):
+        return Bookmark.objects.filter(user=self.request.user).select_related('post', 'post__author')
+
+    def post(self, request, *args, **kwargs):
+        post_id = request.data.get('post_id')
+        if not post_id:
+            return Response({'error': 'post_id required'}, status=400)
+        try:
+            bookmark, created = Bookmark.objects.get_or_create(user=request.user, post_id=post_id)
+            if not created:
+                bookmark.delete()
+                return Response({'status': 'unbookmarked', 'bookmarked': False})
+            return Response({'status': 'bookmarked', 'bookmarked': True, **BookmarkSerializer(bookmark).data}, status=201)
+        except Exception as e:
+            return Response({'error': str(e)}, status=400)

@@ -46,7 +46,7 @@ function defaultAvatar(seed: string) {
   return `https://i.pravatar.cc/150?u=${encodeURIComponent(seed)}`;
 }
 
-function mapPost(post: BackendPost): FeedPost {
+export function mapPost(post: BackendPost): FeedPost {
   return {
     id: post.id,
     authorId: post.author_id,
@@ -338,4 +338,38 @@ export function buildPeopleSuggestionsFromFollows(
       isFollowing: followingIds.has(item.follower_id),
     }))
     .sort((a, b) => Number(a.isFollowing) - Number(b.isFollowing));
+}
+export async function togglePostBookmark(postId: string) {
+  return apiRequest<{ status: string; bookmarked: boolean; id?: number; post?: BackendPost }>(/api/bookmarks/, {
+    method: 'POST',
+    body: JSON.stringify({ post_id: postId })
+  });
+}
+
+export async function fetchBookmarks(): Promise<BackendPost[]> {
+  const result: any[] = await apiRequest(/api/bookmarks/);
+  return result.map(b => b.post);
+}
+
+export async function fetchStories(): Promise<any[]> {
+  return apiRequest(/api/stories/);
+}
+
+export async function uploadStory(data: { text?: string, image_url?: string }): Promise<any> {
+  return apiRequest(/api/stories/, {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+}
+export async function updatePost(postId: string, text: string): Promise<BackendPost> {
+  return apiRequest(/api/posts//, {
+    method: 'PATCH',
+    body: JSON.stringify({ caption: text })
+  });
+}
+
+export async function deletePost(postId: string): Promise<void> {
+  return apiRequest(/api/posts//, {
+    method: 'DELETE'
+  });
 }

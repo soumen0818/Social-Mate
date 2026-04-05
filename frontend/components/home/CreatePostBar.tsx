@@ -27,16 +27,7 @@ export default function CreatePostBar({ user }: CreatePostBarProps) {
           <Ionicons name="image-outline" size={18} color={Colors.primary} />
           <Text style={styles.actionText}>Image</Text>
         </TouchableOpacity>
-        <View style={styles.sep} />
-        <TouchableOpacity style={styles.action} onPress={() => router.push('/post/create')}>
-          <Ionicons name="videocam-outline" size={18} color={Colors.primary} />
-          <Text style={styles.actionText}>Videos</Text>
-        </TouchableOpacity>
-        <View style={styles.sep} />
-        <TouchableOpacity style={styles.action} onPress={() => router.push('/post/create')}>
-          <Ionicons name="attach-outline" size={18} color={Colors.primary} />
-          <Text style={styles.actionText}>Attach</Text>
-        </TouchableOpacity>
+
       </View>
     </View>
   );
