@@ -3,7 +3,7 @@
   <h1>Social-Mate</h1>
   <p><em>An Instagram-inspired, modern social interaction platform built for learning, scale, and clean architecture.</em></p>
   <br />
-  <a href="https://expo.dev/artifacts/eas/fq3VVae1Hizi95ZRDfsWqR.apk">
+  <a href="https://expo.dev/artifacts/eas/3MJKi3Rrdf4S4oSiR4Epoo.aab">
     <img src="https://img.shields.io/badge/Download_APK-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Download Android APK" />
   </a>
   <br /><br />
